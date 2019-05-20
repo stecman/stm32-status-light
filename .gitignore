@@ -1,0 +1,6 @@
+# Build outsputs
+/build/
+*.elf
+*.hex
+*.o
+*.d
