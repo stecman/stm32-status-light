@@ -49,6 +49,9 @@
 #include "main.h"
 #include "stm32f0xx_hal.h"
 #include "usb_device.h"
+#include "sk6812.h"
+
+#include <stdlib.h>
 
 /* USER CODE BEGIN Includes */
 
@@ -68,182 +71,9 @@ TIM_HandleTypeDef htim17;
 /* Private function prototypes -----------------------------------------------*/
 void SystemClock_Config(void);
 static void MX_GPIO_Init(void);
-static void MX_IWDG_Init(void);
+// static void MX_IWDG_Init(void);
 static void MX_TIM16_Init(void);
 static void MX_TIM17_Init(void);
-
-static void _tim17_run_blocking()
-{
-    // Update settings and clear the prescaler counter
-    TIM17->EGR |= TIM_EGR_UG;
-
-    // Clear the overflow flag
-    TIM17->SR = ~TIM_FLAG_UPDATE;
-
-    // Start the timer
-    TIM17->CR1 |= TIM_CR1_CEN;
-
-    // Wait until the timer overflows
-    while ((TIM17->SR & TIM_FLAG_UPDATE) == 0);
-
-    // Stop the timer
-    TIM17->CR1 &= ~TIM_CR1_CEN;
-}
-
-static void delay_ms(uint16_t milliseconds)
-{
-    // Set period to requested tickets
-    TIM17->ARR = milliseconds;
-
-    // Set prescaler for 1 tick = 1ms
-    TIM17->PSC = 48000;
-
-    _tim17_run_blocking();
-}
-
-static void delay_us(uint16_t microseconds)
-{
-    // Set period to requested tickets
-    TIM17->ARR = microseconds;
-
-    // Set prescaler for 1 tick = 1us
-    TIM17->PSC = 48;
-
-    _tim17_run_blocking();
-}
-
-__attribute__((always_inline))
-static inline void delay_300ns()
-{
-    __NOP(); __NOP(); __NOP(); __NOP(); __NOP();
-    __NOP(); __NOP(); __NOP(); __NOP(); __NOP();
-}
-
-__attribute__((always_inline))
-static inline void delay_600ns()
-{
-    __NOP(); __NOP(); __NOP(); __NOP(); __NOP();
-    __NOP(); __NOP(); __NOP(); __NOP(); __NOP();
-    __NOP(); __NOP(); __NOP(); __NOP(); __NOP();
-    __NOP(); __NOP(); __NOP(); __NOP(); __NOP();
-    __NOP(); __NOP(); __NOP();
-}
-
-__attribute__((always_inline))
-static inline void delay_900ns()
-{
-    __NOP(); __NOP(); __NOP(); __NOP(); __NOP();
-    __NOP(); __NOP(); __NOP(); __NOP(); __NOP();
-    __NOP(); __NOP(); __NOP(); __NOP(); __NOP();
-    __NOP(); __NOP(); __NOP(); __NOP(); __NOP();
-    __NOP(); __NOP(); __NOP(); __NOP(); __NOP();
-    __NOP(); __NOP(); __NOP(); __NOP(); __NOP();
-    __NOP(); __NOP(); __NOP();
-}
-
-static void sk6812_reset(void)
-{
-    // Pull LED data line low for longer than the reset period
-    LED_DATA_GPIO_Port->BRR = LED_DATA_Pin;
-    delay_us(80);
-}
-
-/**
- * Write a 24-bit colour on the LED data line
- */
-static void sk6812_write_grb(uint32_t colour)
-{
-    // Disable interrupts from messing with the tight time-based LED data signal
-    __disable_irq();
-
-    uint8_t bits = 24;
-    while (bits != 0) {
-
-        // Check if the 24th bit is set
-        if ((colour & 0x800000) == 0) {
-            // Send "zero" bit
-
-            // Write high
-            LED_DATA_GPIO_Port->BSRR = LED_DATA_Pin;
-            delay_300ns();
-
-            // Write low
-            LED_DATA_GPIO_Port->BRR = LED_DATA_Pin;
-            delay_900ns();
-
-        } else {
-
-            // Send "one" bit
-
-            // Write high
-            LED_DATA_GPIO_Port->BSRR = LED_DATA_Pin;
-            delay_600ns();
-
-            // Write low
-            LED_DATA_GPIO_Port->BRR = LED_DATA_Pin;
-
-            // Delay including loop overhead to 600ns
-            __NOP(); __NOP(); __NOP(); __NOP(); __NOP();
-            __NOP(); __NOP(); __NOP(); __NOP(); __NOP();
-            __NOP(); __NOP(); __NOP(); __NOP(); __NOP();
-        }
-
-        colour <<= 1;
-        --bits;
-    }
-
-    __enable_irq();
-}
-
-static uint32_t rgbTogrb(uint32_t colour)
-{
-    return ((colour & 0xFF00) << 8) |
-           ((colour & 0xFF0000) >> 8) |
-           (colour & 0xFF);
-}
-
-static void sk6812_write_rgb(uint32_t colour)
-{
-    sk6812_write_grb(rgbTogrb(colour));
-}
-
-static uint32_t applyCieBrightness(uint32_t colour)
-{
-    // CIE1931 luminance correction table
-    // Generated from code here: http://jared.geek.nz/2013/feb/linear-led-pwm
-    static const uint8_t brightness[256] = {
-        0, 0, 0, 0, 0, 1, 1, 1, 1, 1,
-        1, 1, 1, 1, 2, 2, 2, 2, 2, 2,
-        2, 2, 2, 3, 3, 3, 3, 3, 3, 3,
-        3, 4, 4, 4, 4, 4, 4, 5, 5, 5,
-        5, 5, 6, 6, 6, 6, 6, 7, 7, 7,
-        7, 8, 8, 8, 8, 9, 9, 9, 10, 10,
-        10, 10, 11, 11, 11, 12, 12, 12, 13, 13,
-        13, 14, 14, 15, 15, 15, 16, 16, 17, 17,
-        17, 18, 18, 19, 19, 20, 20, 21, 21, 22,
-        22, 23, 23, 24, 24, 25, 25, 26, 26, 27,
-        28, 28, 29, 29, 30, 31, 31, 32, 32, 33,
-        34, 34, 35, 36, 37, 37, 38, 39, 39, 40,
-        41, 42, 43, 43, 44, 45, 46, 47, 47, 48,
-        49, 50, 51, 52, 53, 54, 54, 55, 56, 57,
-        58, 59, 60, 61, 62, 63, 64, 65, 66, 67,
-        68, 70, 71, 72, 73, 74, 75, 76, 77, 79,
-        80, 81, 82, 83, 85, 86, 87, 88, 90, 91,
-        92, 94, 95, 96, 98, 99, 100, 102, 103, 105,
-        106, 108, 109, 110, 112, 113, 115, 116, 118, 120,
-        121, 123, 124, 126, 128, 129, 131, 132, 134, 136,
-        138, 139, 141, 143, 145, 146, 148, 150, 152, 154,
-        155, 157, 159, 161, 163, 165, 167, 169, 171, 173,
-        175, 177, 179, 181, 183, 185, 187, 189, 191, 193,
-        196, 198, 200, 202, 204, 207, 209, 211, 214, 216,
-        218, 220, 223, 225, 228, 230, 232, 235, 237, 240,
-        242, 245, 247, 250, 252, 255,
-    };
-
-    return (brightness[(colour & 0xFF)]) |
-           (brightness[(colour & 0xFF00) >> 8] << 8) |
-           (brightness[(colour & 0xFF0000) >> 16] << 16);
-}
 
 int main(void)
 {
@@ -258,66 +88,56 @@ int main(void)
     // MX_IWDG_Init();
     MX_TIM16_Init();
     MX_TIM17_Init();
-    // MX_USB_DEVICE_Init();
+    MX_USB_DEVICE_Init();
 
-    uint32_t colour = 0;
-    uint8_t rgb[3] = {0, 0, 0};
+    // Write an initial state so it can be seen to be working
+    sk6812_write_rgb(0x550000);
+    sk6812_write_rgb(0x005500);
+    sk6812_write_rgb(0x000055);
+    sk6812_write_rgb(0x550055);
 
-    uint8_t mask = 1;
-
-    uint32_t colours[] = {
-        0x550000,
-        0x005500,
-        0x000055,
-        0x550055,
-        0x555500,
-        0x005555,
-        0x125512,
-        0xf99d1e,
-        0xf9f61e,
-        0x1ef9bc,
-        0x971ef9,
-    };
-
-    {
-        uint8_t colour_index = 0;
-
-        for (int i = 0; i < 255; ++i) {
-            delay_ms(100);
-
-            sk6812_reset();
-            for (int j = 0; j < 4; ++j) {
-                sk6812_write_rgb(colours[colour_index]);
-                ++colour_index;
-                if (colour_index == (sizeof(colours)/sizeof(uint32_t))) colour_index = 0;
-            }
-        }
+    while(1) {
+        __NOP();
     }
 
-    while (1)
-    {
-        for (int i = 240; i != 0; --i) {
-            delay_ms(1);
-            if ((mask & 0x1) && rgb[0] < 240) rgb[0] += 1; else if (rgb[0] > 0) rgb[0] -= 1;
-            if ((mask & 0x2) && rgb[1] < 240) rgb[1] += 1; else if (rgb[1] > 0) rgb[1] -= 1;
-            if ((mask & 0x4) && rgb[2] < 240) rgb[2] += 1; else if (rgb[2] > 0) rgb[2] -= 1;
+    // uint32_t colour = 0;
+    // uint8_t rgb[3] = {0, 0, 0};
 
-            colour = (rgb[1] << 16) | (rgb[0] << 8) | rgb[2];
-            colour = applyCieBrightness(colour);
+    // uint8_t mask = 1;
+    // uint32_t history[255] = {};
+    // uint8_t historyIdx = 0;
 
-            // Write colour to all LEDs
-            sk6812_reset();
-            sk6812_write_rgb(colour);
-            sk6812_write_rgb(colour);
-            sk6812_write_rgb(colour);
-            sk6812_write_rgb(colour);
-        }
+    // while (1)
+    // {
+    //     const uint8_t limit = 230;
+    //     const int8_t increment = 1;
 
-        ++mask;
-        if (mask == 0x7) {
-            mask = 1;
-        }
-    }
+    //     for (int i = limit; i != 0; --i) {
+    //         delay_ms(2);
+    //         if ((mask & 0x1) && rgb[0] < limit) rgb[0] += increment; else if (rgb[0] > 0) rgb[0] -= increment;
+    //         if ((mask & 0x2) && rgb[1] < limit) rgb[1] += increment; else if (rgb[1] > 0) rgb[1] -= increment;
+    //         if ((mask & 0x4) && rgb[2] < limit) rgb[2] += increment; else if (rgb[2] > 0) rgb[2] -= increment;
+
+    //         colour = (rgb[1] << 16) | (rgb[0] << 8) | rgb[2];
+    //         colour = applyCieBrightness(colour);
+
+    //         history[historyIdx] = colour;
+
+    //         // Write colour out to leds
+    //         sk6812_reset();
+    //         for (uint8_t j = 0; j < 4; ++j) {
+    //             const uint8_t readIdx = historyIdx - (j * 50);
+    //             sk6812_write_rgb(history[readIdx]);
+    //         }
+
+    //         ++historyIdx;
+    //     }
+
+    //     // Generate random combinations without going all dark
+    //     do {
+    //         mask = rand() * rand();
+    //     } while ((mask & 0x7) == 0);
+    // }
 }
 
 /** System Clock Configuration
@@ -373,19 +193,19 @@ void SystemClock_Config(void)
 }
 
 /* IWDG init function */
-static void MX_IWDG_Init(void)
-{
+// static void MX_IWDG_Init(void)
+// {
 
-    hiwdg.Instance = IWDG;
-    hiwdg.Init.Prescaler = IWDG_PRESCALER_4;
-    hiwdg.Init.Window = 4095;
-    hiwdg.Init.Reload = 4095;
-    if (HAL_IWDG_Init(&hiwdg) != HAL_OK)
-    {
-        _Error_Handler(__FILE__, __LINE__);
-    }
+//     hiwdg.Instance = IWDG;
+//     hiwdg.Init.Prescaler = IWDG_PRESCALER_4;
+//     hiwdg.Init.Window = 4095;
+//     hiwdg.Init.Reload = 4095;
+//     if (HAL_IWDG_Init(&hiwdg) != HAL_OK)
+//     {
+//         _Error_Handler(__FILE__, __LINE__);
+//     }
 
-}
+// }
 
 /* TIM16 init function */
 static void MX_TIM16_Init(void)

@@ -65,8 +65,12 @@ void MX_USB_DEVICE_Init(void)
 
   USBD_RegisterClass(&hUsbDeviceFS, &USBD_HID);
 
-  USBD_Start(&hUsbDeviceFS);
+  // Configure a buffer for data coming from the host initially
+  // The USB driver from the HAL expects an endpoint buffer to exist when a USB interrupt is triggered
+  // so this unfortunately can't be decided / streamed out of the PMA at the time of reception.
+  USBD_LL_PrepareReceive(&hUsbDeviceFS, HID_EOUT_ADDR , g_ep1Buffer, 96);
 
+  USBD_Start(&hUsbDeviceFS);
 }
 /**
   * @}

@@ -62,6 +62,7 @@ Drivers/STM32F0xx_HAL_Driver/Src/stm32f0xx_hal_i2c_ex.c \
 Drivers/STM32F0xx_HAL_Driver/Src/stm32f0xx_hal_tim_ex.c \
 Drivers/STM32F0xx_HAL_Driver/Src/stm32f0xx_hal_flash.c \
 Src/main.c \
+Src/sk6812.c \
 Drivers/STM32F0xx_HAL_Driver/Src/stm32f0xx_hal_pwr_ex.c \
 Drivers/STM32F0xx_HAL_Driver/Src/stm32f0xx_hal_gpio.c \
 Drivers/STM32F0xx_HAL_Driver/Src/stm32f0xx_hal_dma.c \

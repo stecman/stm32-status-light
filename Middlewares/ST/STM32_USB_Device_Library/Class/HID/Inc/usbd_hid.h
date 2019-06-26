@@ -50,18 +50,20 @@
   * @{
   */
 #define HID_EPIN_ADDR                 0x81
-#define HID_EPIN_SIZE                 0x04
+#define HID_EPIN_SIZE                 12
 
-#define USB_HID_CONFIG_DESC_SIZ       34
+#define HID_EOUT_ADDR                 0x01
+#define HID_EOUT_SIZE                 96
+
+#define USB_HID_CONFIG_DESC_SIZ       32
 #define USB_HID_DESC_SIZ              9
-#define HID_MOUSE_REPORT_DESC_SIZE    74
 
 #define HID_DESCRIPTOR_TYPE           0x21
 #define HID_REPORT_DESC               0x22
 
-#define HID_HS_BINTERVAL               0x07
-#define HID_FS_BINTERVAL               0x0A
-#define HID_POLLING_INTERVAL           0x0A
+#define HID_HS_BINTERVAL              0x07
+#define HID_FS_BINTERVAL              0x0A
+#define HID_POLLING_INTERVAL          0x0A
 
 #define HID_REQ_SET_PROTOCOL          0x0B
 #define HID_REQ_GET_PROTOCOL          0x03
@@ -98,7 +100,8 @@ USBD_HID_HandleTypeDef;
 /**
   * @}
   */
-
+ 
+ extern uint8_t g_ep1Buffer[64];
 
 
 /** @defgroup USBD_CORE_Exported_Macros

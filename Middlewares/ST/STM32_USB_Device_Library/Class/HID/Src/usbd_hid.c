@@ -51,6 +51,11 @@
 #include "usbd_desc.h"
 #include "usbd_ctlreq.h"
 
+#include "sk6812.h"
+
+#include <string.h>
+
+uint8_t g_ep1Buffer[64];
 
 /** @addtogroup STM32_USB_DEVICE_LIBRARY
   * @{
@@ -108,9 +113,8 @@ static uint8_t  *USBD_HID_GetCfgDesc (uint16_t *length);
 static uint8_t  *USBD_HID_GetDeviceQualifierDesc (uint16_t *length);
 
 static uint8_t  USBD_HID_DataIn (USBD_HandleTypeDef *pdev, uint8_t epnum);
-/**
-  * @}
-  */
+
+static uint8_t  USBD_HID_DataOut (USBD_HandleTypeDef *pdev, uint8_t epnum);
 
 /** @defgroup USBD_HID_Private_Variables
   * @{
@@ -124,7 +128,7 @@ USBD_ClassTypeDef  USBD_HID =
   NULL, /*EP0_TxSent*/
   NULL, /*EP0_RxReady*/
   USBD_HID_DataIn, /*DataIn*/
-  NULL, /*DataOut*/
+  USBD_HID_DataOut, /*DataOut*/
   NULL, /*SOF */
   NULL,
   NULL,
@@ -132,6 +136,21 @@ USBD_ClassTypeDef  USBD_HID =
   USBD_HID_GetCfgDesc,
   USBD_HID_GetCfgDesc,
   USBD_HID_GetDeviceQualifierDesc,
+};
+
+__ALIGN_BEGIN static uint8_t HID_ReportDesc[] __ALIGN_END = {
+    0x05, 0x08,         // USAGE_PAGE (LEDs)
+    0x09, 0x4b,         // USAGE (Generic Indicator)
+    0x09, 0x47,         // USAGE (Usage Indicator Color)
+    0xa1, 0x01,         // COLLECTION (Application)
+    0x15, 0x00,         //   LOGICAL_MINIMUM (0)
+    0x26, 0xff, 0x00,   //   LOGICAL_MAXIMUM (255)
+    0x75, 0x08,         //   REPORT_SIZE (8)
+    0x85, 0x01,         //   REPORT_ID (1)
+    0x95, 0x40,         //   REPORT_COUNT (64)
+    0x09, 0x00,         //   USAGE (Undefined)
+    0x91, 0x82,         //   OUTPUT (Data,Var,Abs,Vol)
+    0xc0                // END_COLLECTION
 };
 
 /* USB HID device Configuration Descriptor */
@@ -144,45 +163,54 @@ __ALIGN_BEGIN static uint8_t USBD_HID_CfgDesc[USB_HID_CONFIG_DESC_SIZ]  __ALIGN_
   0x00,
   0x01,         /*bNumInterfaces: 1 interface*/
   0x01,         /*bConfigurationValue: Configuration value*/
-  0x00,         /*iConfiguration: Index of string descriptor describing
-  the configuration*/
+  0x00,         /*iConfiguration: Index of string descriptor describing the configuration*/
   0xE0,         /*bmAttributes: bus powered and Support Remote Wake-up */
-  0x32,         /*MaxPower 100 mA: this current is used for detecting Vbus*/
+  0xC8,         /*MaxPower 400mA as we're driving LEDs at full brightness*/
 
-  /************** Descriptor of Joystick Mouse interface ****************/
-  /* 09 */
+  // Interface Descriptor
+  //
   0x09,         /*bLength: Interface Descriptor size*/
   USB_DESC_TYPE_INTERFACE,/*bDescriptorType: Interface descriptor type*/
   0x00,         /*bInterfaceNumber: Number of Interface*/
   0x00,         /*bAlternateSetting: Alternate setting*/
-  0x01,         /*bNumEndpoints*/
-  0x03,         /*bInterfaceClass: HID*/
-  0x01,         /*bInterfaceSubClass : 1=BOOT, 0=no boot*/
-  0x02,         /*nInterfaceProtocol : 0=none, 1=keyboard, 2=mouse*/
+  0x02,         /*bNumEndpoints*/
+  0xFF,         /*bInterfaceClass: HID*/
+  0x00,         /*bInterfaceSubClass : 1=BOOT, 0=no boot*/
+  0x00,         /*nInterfaceProtocol : 0=none, 1=keyboard, 2=mouse*/
   0,            /*iInterface: Index of string descriptor*/
-  /******************** Descriptor of Joystick Mouse HID ********************/
-  /* 18 */
-  0x09,         /*bLength: HID Descriptor size*/
-  HID_DESCRIPTOR_TYPE, /*bDescriptorType: HID*/
-  0x11,         /*bcdHID: HID Class Spec release number*/
-  0x01,
-  0x00,         /*bCountryCode: Hardware target country*/
-  0x01,         /*bNumDescriptors: Number of HID class descriptors to follow*/
-  0x22,         /*bDescriptorType*/
-  HID_MOUSE_REPORT_DESC_SIZE,/*wItemLength: Total length of Report descriptor*/
-  0x00,
-  /******************** Descriptor of Mouse endpoint ********************/
-  /* 27 */
+
+  // // HID Descriptor
+  // //
+  // 0x09,         /*bLength: HID Descriptor size*/
+  // HID_DESCRIPTOR_TYPE, /*bDescriptorType: HID*/
+  // 0x11,         /*bcdHID: HID Class Spec release number*/
+  // 0x01,
+  // 0x00,         /*bCountryCode: Hardware target country*/
+  // 0x01,         /*bNumDescriptors: Number of HID class descriptors to follow*/
+  // 0x22,         /*bDescriptorType: Report*/
+  // sizeof(HID_ReportDesc),/*wItemLength: Total length of Report descriptor*/
+  // 0x00,
+
+  // HID endpoint IN descriptor
+  //
   0x07,          /*bLength: Endpoint Descriptor size*/
   USB_DESC_TYPE_ENDPOINT, /*bDescriptorType:*/
-
-  HID_EPIN_ADDR,     /*bEndpointAddress: Endpoint Address (IN)*/
+  HID_EPIN_ADDR, /*bEndpointAddress: Endpoint Address (OUT)*/
   0x03,          /*bmAttributes: Interrupt endpoint*/
   HID_EPIN_SIZE, /*wMaxPacketSize: 4 Byte max */
   0x00,
   HID_FS_BINTERVAL,          /*bInterval: Polling Interval (10 ms)*/
-  /* 34 */
-} ;
+
+  // HID endpoint OUT descriptor
+  //
+  0x07,          /*bLength: Endpoint Descriptor size*/
+  USB_DESC_TYPE_ENDPOINT, /*bDescriptorType:*/
+  HID_EOUT_ADDR, /*bEndpointAddress: Endpoint Address (OUT)*/
+  0x03,          /*bmAttributes: Interrupt endpoint*/
+  HID_EOUT_SIZE, /*wMaxPacketSize: 4 Byte max */
+  0x00,
+  HID_FS_BINTERVAL,          /*bInterval: Polling Interval (10 ms)*/
+};
 
 /* USB HID device Configuration Descriptor */
 __ALIGN_BEGIN static uint8_t USBD_HID_Desc[USB_HID_DESC_SIZ]  __ALIGN_END  =
@@ -193,9 +221,9 @@ __ALIGN_BEGIN static uint8_t USBD_HID_Desc[USB_HID_DESC_SIZ]  __ALIGN_END  =
   0x11,         /*bcdHID: HID Class Spec release number*/
   0x01,
   0x00,         /*bCountryCode: Hardware target country*/
-  0x01,         /*bNumDescriptors: Number of HID class descriptors to follow*/
+  0x02,         /*bNumDescriptors: Number of HID class descriptors to follow*/
   0x22,         /*bDescriptorType*/
-  HID_MOUSE_REPORT_DESC_SIZE,/*wItemLength: Total length of Report descriptor*/
+  sizeof(HID_ReportDesc),/*wItemLength: Total length of Report descriptor*/
   0x00,
 };
 
@@ -214,60 +242,6 @@ __ALIGN_BEGIN static uint8_t USBD_HID_DeviceQualifierDesc[USB_LEN_DEV_QUALIFIER_
   0x00,
 };
 
-__ALIGN_BEGIN static uint8_t HID_MOUSE_ReportDesc[HID_MOUSE_REPORT_DESC_SIZE]  __ALIGN_END =
-{
-  0x05,   0x01,
-  0x09,   0x02,
-  0xA1,   0x01,
-  0x09,   0x01,
-
-  0xA1,   0x00,
-  0x05,   0x09,
-  0x19,   0x01,
-  0x29,   0x03,
-
-  0x15,   0x00,
-  0x25,   0x01,
-  0x95,   0x03,
-  0x75,   0x01,
-
-  0x81,   0x02,
-  0x95,   0x01,
-  0x75,   0x05,
-  0x81,   0x01,
-
-  0x05,   0x01,
-  0x09,   0x30,
-  0x09,   0x31,
-  0x09,   0x38,
-
-  0x15,   0x81,
-  0x25,   0x7F,
-  0x75,   0x08,
-  0x95,   0x03,
-
-  0x81,   0x06,
-  0xC0,   0x09,
-  0x3c,   0x05,
-  0xff,   0x09,
-
-  0x01,   0x15,
-  0x00,   0x25,
-  0x01,   0x75,
-  0x01,   0x95,
-
-  0x02,   0xb1,
-  0x22,   0x75,
-  0x06,   0x95,
-  0x01,   0xb1,
-
-  0x01,   0xc0
-};
-
-/**
-  * @}
-  */
-
 /** @defgroup USBD_HID_Private_Functions
   * @{
   */
@@ -282,25 +256,31 @@ __ALIGN_BEGIN static uint8_t HID_MOUSE_ReportDesc[HID_MOUSE_REPORT_DESC_SIZE]  _
 static uint8_t  USBD_HID_Init (USBD_HandleTypeDef *pdev,
                                uint8_t cfgidx)
 {
-  uint8_t ret = 0;
-
-  /* Open EP IN */
+  // Open EP1 IN (tx)
   USBD_LL_OpenEP(pdev,
                  HID_EPIN_ADDR,
                  USBD_EP_TYPE_INTR,
                  HID_EPIN_SIZE);
 
+  // Open EP1 OUT (rx)
+  USBD_LL_OpenEP(pdev,
+                 HID_EOUT_ADDR,
+                 USBD_EP_TYPE_INTR,
+                 HID_EOUT_SIZE);
+
   pdev->pClassData = USBD_malloc(sizeof (USBD_HID_HandleTypeDef));
+
+  // Blank the RX buffer
+  memset(&g_ep1Buffer, 0, sizeof(g_ep1Buffer));
 
   if(pdev->pClassData == NULL)
   {
-    ret = 1;
-  }
-  else
-  {
+    return 1;
+  } else {
     ((USBD_HID_HandleTypeDef *)pdev->pClassData)->state = HID_IDLE;
   }
-  return ret;
+
+  return 0;
 }
 
 /**
@@ -380,8 +360,8 @@ static uint8_t  USBD_HID_Setup (USBD_HandleTypeDef *pdev,
     case USB_REQ_GET_DESCRIPTOR:
       if( req->wValue >> 8 == HID_REPORT_DESC)
       {
-        len = MIN(HID_MOUSE_REPORT_DESC_SIZE , req->wLength);
-        pbuf = HID_MOUSE_ReportDesc;
+        len = MIN(sizeof(HID_ReportDesc) , req->wLength);
+        pbuf = HID_ReportDesc;
       }
       else if( req->wValue >> 8 == HID_DESCRIPTOR_TYPE)
       {
@@ -485,13 +465,30 @@ static uint8_t  *USBD_HID_GetCfgDesc (uint16_t *length)
   * @param  epnum: endpoint index
   * @retval status
   */
-static uint8_t  USBD_HID_DataIn (USBD_HandleTypeDef *pdev,
-                              uint8_t epnum)
+static uint8_t  USBD_HID_DataIn (USBD_HandleTypeDef *pdev, uint8_t epnum)
 {
 
   /* Ensure that the FIFO is empty before a new transfer, this condition could
   be caused by  a new transfer before the end of the previous transfer */
   ((USBD_HID_HandleTypeDef *)pdev->pClassData)->state = HID_IDLE;
+
+  USBD_HID_SendReport(pdev, g_ep1Buffer, 12);
+
+  return USBD_OK;
+}
+
+static uint8_t  USBD_HID_DataOut (USBD_HandleTypeDef *pdev, uint8_t epnum)
+{
+  sk6812_reset();
+
+  // Dump the recieve buffer to the leds as a test
+  for (uint8_t i = 0; i < 12; i += 3) {
+    sk6812_write_rgb( *((uint32_t*)(g_ep1Buffer + i)) );
+  }
+
+  // Re-use the same buffer for the next transfer
+  USBD_LL_PrepareReceive(pdev, HID_EOUT_ADDR , g_ep1Buffer, 96);
+
   return USBD_OK;
 }
 
