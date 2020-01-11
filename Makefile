@@ -90,6 +90,8 @@ startup_stm32f070x6.s
 ######################################
 PERIFLIB_SOURCES =
 
+FLASH_SIZE_BYTES = 32768
+SRAM_SIZE_BYTES = 6144
 
 #######################################
 # binaries
@@ -99,7 +101,6 @@ CC = $(PREFIX)gcc
 AS = $(PREFIX)gcc -x assembler-with-cpp
 CP = $(PREFIX)objcopy
 AR = $(PREFIX)ar
-SZ = $(PREFIX)size
 HEX = $(CP) -O ihex
 BIN = $(CP) -O binary -S
 
@@ -187,7 +188,7 @@ $(BUILD_DIR)/%.o: %.s Makefile | $(BUILD_DIR)
 
 $(BUILD_DIR)/$(TARGET).elf: $(OBJECTS) Makefile
 	$(CC) $(OBJECTS) $(LDFLAGS) -o $@
-	$(SZ) $@
+	./scripts/size.sh $@ $(FLASH_SIZE_BYTES) $(SRAM_SIZE_BYTES)
 
 $(BUILD_DIR)/%.hex: $(BUILD_DIR)/%.elf | $(BUILD_DIR)
 	$(HEX) $< $@
