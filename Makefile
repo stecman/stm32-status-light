@@ -24,6 +24,7 @@ DEBUG = 1
 # optimization
 OPT = -Os
 
+SERIALNUM ?= DEVELOPMENT
 
 #######################################
 # paths
@@ -126,7 +127,8 @@ AS_DEFS =
 # C defines
 C_DEFS =  \
 -DUSE_HAL_DRIVER \
--DSTM32F070x6
+-DSTM32F070x6 \
+-DSERIALNUM="\"$(SERIALNUM)\""
 
 
 # AS includes

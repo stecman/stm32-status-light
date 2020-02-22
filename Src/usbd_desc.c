@@ -67,6 +67,9 @@
 /**
   * @}
   */
+#ifndef SERIALNUM
+  #define SERIALNUM "DEV"
+#endif
 
 /** @defgroup USBD_DESC_Private_Defines
   * @{
@@ -77,8 +80,8 @@
 
 #define USBD_LANGID_STRING 1033
 #define USBD_MANUFACTURER_STRING "Stecman"
-#define USBD_PRODUCT_STRING_FS "Status Light"
-#define USBD_SERIALNUMBER_STRING_FS "BlindingBeat"
+#define USBD_PRODUCT_STRING_FS "Status Light v2"
+#define USBD_SERIALNUMBER_STRING_FS SERIALNUM
 #define USBD_CONFIGURATION_STRING_FS "HID Config"
 #define USBD_INTERFACE_STRING_FS "HID Interface"
 
