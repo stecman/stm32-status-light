@@ -10,6 +10,37 @@ import random
 VENDOR_ID = 0x26BA
 PRODUCT_ID = 0x8002
 
+class UsbMultiHandle():
+    """ Open handles to all devices matching the vendor and product ID """
+    def __init__(self, context, vendorId, productId, skipOnError=False):
+        self.handles = []
+
+        self.context = context
+
+        self.vendorId = vendorId
+        self.productId = productId
+        self.skipOnError = skipOnError
+
+    def __enter__(self):
+        for device in self.context.getDeviceIterator(skip_on_error=self.skipOnError):
+            if device.getVendorID() == self.vendorId and device.getProductID() == self.productId:
+                handle = device.open()
+
+                if handle:
+                    print(device)
+                    handle.claimInterface(0)
+                    self.handles.append(handle)
+                else:
+                    print("Failed to open device:", device)
+
+
+        return self.handles
+
+    def __exit__(self, type, value, traceback):
+        for device in self.handles:
+            device.releaseInterface(0)
+            device.close()
+
 def controlWrite(handle, data):
     handle.controlWrite(
         usb1.TYPE_VENDOR | usb1.RECIPIENT_DEVICE,
@@ -38,29 +69,36 @@ def float_to_byte(colour):
     ]
 
 with usb1.USBContext() as context:
-    handle = context.openByVendorIDAndProductID(
-        VENDOR_ID,
-        PRODUCT_ID,
-        skip_on_error=True,
-    )
-
-    if handle is None:
-    	print("Failed to find a device")
-    	sys.exit(1)
-    else:
-        print("Got device...")
-
-    with handle.claimInterface(0):
-        print("Doot")
+    with UsbMultiHandle(context, VENDOR_ID, PRODUCT_ID, skipOnError=True) as handles:
+        if not handles:
+            print("No devices found!")
+            sys.exit(1)
 
         hue = 0
-        while True:
-            # time.sleep(1/160.0)
-            send_colour(handle,
-                float_to_byte(colorsys.hsv_to_rgb(hue % 1.0, 1, 1)),
-                float_to_byte(colorsys.hsv_to_rgb((hue + 0.03) % 1.0, 1, 1)),
-                float_to_byte(colorsys.hsv_to_rgb((hue + 0.06) % 1.0, 1, 1)),
-                float_to_byte(colorsys.hsv_to_rgb((hue + 0.09) % 1.0, 1, 1)),
-            )
+        offset = 0.01
+        updateCount = 0
 
-            hue += 0.001
+        hues = [hue/16.0 for hue in range(0, 16)]
+
+        while True:
+            time.sleep(1/60.0)
+
+            colours = []
+
+            # Update values
+            for i in range(len(hues)):
+                colours.append(float_to_byte(colorsys.hsv_to_rgb(hues[i] % 1.0, 1, 0.5)))
+                hues[i] += offset
+
+            # Send values
+            index = 0
+
+            for handle in handles:
+                send_colour(handle,
+                    colours[index],
+                    colours[index + 1],
+                    colours[index + 2],
+                    colours[index + 3],
+                )
+
+                index += 4
