@@ -74,6 +74,13 @@ static inline void delay_900ns()
     __NOP(); __NOP(); __NOP();
 }
 
+void sk6812_reset(void)
+{
+    // Pull LED data line low for longer than the reset period
+    LED_DATA_GPIO_Port->BRR = LED_DATA_Pin;
+    delay_us(80);
+}
+
 /**
  * Write a 24-bit colour on the LED data line
  */
@@ -120,13 +127,6 @@ static uint32_t rgbTogrb(uint32_t colour)
     return ((colour & 0xFF00) << 8) |
            ((colour & 0xFF0000) >> 8) |
            (colour & 0xFF);
-}
-
-void sk6812_reset(void)
-{
-    // Pull LED data line low for longer than the reset period
-    LED_DATA_GPIO_Port->BRR = LED_DATA_Pin;
-    delay_us(80);
 }
 
 void sk6812_write_rgb(uint32_t colour)

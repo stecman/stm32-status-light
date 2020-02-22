@@ -91,53 +91,14 @@ int main(void)
     MX_USB_DEVICE_Init();
 
     // Write an initial state so it can be seen to be working
-    sk6812_write_rgb(0x550000);
-    sk6812_write_rgb(0x005500);
-    sk6812_write_rgb(0x000055);
-    sk6812_write_rgb(0x550055);
+    sk6812_write_rgb(0x110000);
+    sk6812_write_rgb(0x001100);
+    sk6812_write_rgb(0x000011);
+    sk6812_write_rgb(0x111100);
 
     while(1) {
         __NOP();
     }
-
-    // uint32_t colour = 0;
-    // uint8_t rgb[3] = {0, 0, 0};
-
-    // uint8_t mask = 1;
-    // uint32_t history[255] = {};
-    // uint8_t historyIdx = 0;
-
-    // while (1)
-    // {
-    //     const uint8_t limit = 230;
-    //     const int8_t increment = 1;
-
-    //     for (int i = limit; i != 0; --i) {
-    //         delay_ms(2);
-    //         if ((mask & 0x1) && rgb[0] < limit) rgb[0] += increment; else if (rgb[0] > 0) rgb[0] -= increment;
-    //         if ((mask & 0x2) && rgb[1] < limit) rgb[1] += increment; else if (rgb[1] > 0) rgb[1] -= increment;
-    //         if ((mask & 0x4) && rgb[2] < limit) rgb[2] += increment; else if (rgb[2] > 0) rgb[2] -= increment;
-
-    //         colour = (rgb[1] << 16) | (rgb[0] << 8) | rgb[2];
-    //         colour = applyCieBrightness(colour);
-
-    //         history[historyIdx] = colour;
-
-    //         // Write colour out to leds
-    //         sk6812_reset();
-    //         for (uint8_t j = 0; j < 4; ++j) {
-    //             const uint8_t readIdx = historyIdx - (j * 50);
-    //             sk6812_write_rgb(history[readIdx]);
-    //         }
-
-    //         ++historyIdx;
-    //     }
-
-    //     // Generate random combinations without going all dark
-    //     do {
-    //         mask = rand() * rand();
-    //     } while ((mask & 0x7) == 0);
-    // }
 }
 
 /** System Clock Configuration
