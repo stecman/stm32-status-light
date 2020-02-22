@@ -174,9 +174,9 @@ __ALIGN_BEGIN static uint8_t USBD_HID_CfgDesc[USB_HID_CONFIG_DESC_SIZ]  __ALIGN_
   0x00,         /*bInterfaceNumber: Number of Interface*/
   0x00,         /*bAlternateSetting: Alternate setting*/
   0x02,         /*bNumEndpoints*/
-  0xFF,         /*bInterfaceClass: HID*/
-  0x00,         /*bInterfaceSubClass : 1=BOOT, 0=no boot*/
-  0x00,         /*nInterfaceProtocol : 0=none, 1=keyboard, 2=mouse*/
+  0xFF,         /*bInterfaceClass: Vendor specific */
+  0xFF,         /*bInterfaceSubClass : Vendor specific */
+  0xFF,         /*nInterfaceProtocol : Vendor specific */
   0,            /*iInterface: Index of string descriptor*/
 
   // // HID Descriptor

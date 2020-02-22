@@ -53,7 +53,7 @@
 #define HID_EPIN_SIZE                 12
 
 #define HID_EOUT_ADDR                 0x01
-#define HID_EOUT_SIZE                 96
+#define HID_EOUT_SIZE                 64
 
 #define USB_HID_CONFIG_DESC_SIZ       32
 #define USB_HID_DESC_SIZ              9
