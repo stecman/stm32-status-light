@@ -1,6 +1,7 @@
-# Build outsputs
-/build/
+build/
 *.elf
 *.hex
 *.o
 *.d
+*.bin
+generated.*.ld
