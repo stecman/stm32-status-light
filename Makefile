@@ -205,10 +205,10 @@ disasm: $(BUILD_DIR)/$(TARGET).elf
 	$(PREFIX)objdump -d $(BUILD_DIR)/$(TARGET).elf
 
 flash: all
-	openocd -f openocd-jlink.cfg -c 'program_and_run ()'
+	BINARY=$(BUILD_DIR)/$(TARGET).elf openocd -f openocd-jlink.cfg -c 'program_and_run ()'
 
 flash_and_debug: all
-	openocd -f openocd-jlink.cfg -c 'program_and_attach ()'
+	BINARY=$(BUILD_DIR)/$(TARGET).elf openocd -f openocd-jlink.cfg -c 'program_and_attach ()'
 
 debug_server:
 	# This doesn't like being backgrounded from make for some reason
