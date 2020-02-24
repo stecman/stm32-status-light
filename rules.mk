@@ -125,6 +125,10 @@ else
 GENERATED_BINS += $(LDSCRIPT)
 endif
 
+# Ensure the platform we want from libopencm3 is compiled
+opencm3:
+	$(Q)$(MAKE) -C $(OPENCM3_DIR) TARGETS=stm32/f0
+
 # Need a special rule to have a bin dir
 $(BUILD_DIR)/%.o: %.c
 	@printf "  CC\t$<\n"
@@ -141,7 +145,7 @@ $(BUILD_DIR)/%.o: %.S
 	@mkdir -p $(dir $@)
 	$(Q)$(CC) $(TGT_ASFLAGS) $(ASFLAGS) $(TGT_CPPFLAGS) $(CPPFLAGS) -o $@ -c $<
 
-$(PROJECT).elf: $(OBJS) $(LDSCRIPT) $(LIBDEPS)
+$(PROJECT).elf: opencm3 $(OBJS) $(LDSCRIPT) $(LIBDEPS)
 	@printf "  LD\t$@\n"
 	$(Q)$(LD) $(TGT_LDFLAGS) $(LDFLAGS) $(OBJS) $(LDLIBS) -o $@
 
@@ -161,6 +165,11 @@ $(PROJECT).elf: $(OBJS) $(LDSCRIPT) $(LIBDEPS)
 clean:
 	rm -rf $(BUILD_DIR) $(GENERATED_BINS)
 
-.PHONY: all clean
+	$(Q)if [ -d $* ]; then \
+		printf "  CLEAN   $*\n"; \
+		$(MAKE) -C $* clean OPENCM3_DIR=$(OPENCM3_DIR) || exit $?; \
+	fi;
+
+.PHONY: all clean opencm3
 -include $(OBJS:.o=.d)
 
