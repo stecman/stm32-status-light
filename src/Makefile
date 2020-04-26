@@ -11,7 +11,9 @@ PROJECT = status-light
 BUILD_DIR = build
 
 SHARED_DIR = ../common
-CFILES = main.c sk6812.c
+CFILES = main.c \
+  usb_control.c \
+  sk6812.c \
 
 SERIALNUM ?= DEVELOPMENT
 
