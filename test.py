@@ -24,14 +24,17 @@ class UsbMultiHandle():
     def __enter__(self):
         for device in self.context.getDeviceIterator(skip_on_error=self.skipOnError):
             if device.getVendorID() == self.vendorId and device.getProductID() == self.productId:
-                handle = device.open()
+                try:
+                    handle = device.open()
 
-                if handle:
-                    print(device)
-                    handle.claimInterface(0)
-                    self.handles.append(handle)
-                else:
-                    print("Failed to open device:", device)
+                    if handle:
+                        print(device)
+                        handle.claimInterface(0)
+                        self.handles.append(handle)
+                    else:
+                        print("Failed to open device:", device)
+                except usb1.USBErrorBusy as e:
+                    print("Exception opening device:", e)
 
 
         return self.handles
