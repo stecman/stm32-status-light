@@ -12,8 +12,9 @@ BUILD_DIR = build
 
 SHARED_DIR = ../common
 CFILES = main.c \
-  usb_control.c \
+  delay.c \
   sk6812.c \
+  usb_control.c \
 
 SERIALNUM ?= DEVELOPMENT
 

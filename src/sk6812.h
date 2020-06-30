@@ -3,16 +3,6 @@
 #include <stdint.h>
 
 /**
- * Blocking delay for a period of milliseconds
- */
-void delay_ms(uint16_t milliseconds);
-
-/**
- * Blocking delay for a period of microseconds
- */
-void delay_us(uint16_t microseconds);
-
-/**
  * Configure perihperals needed to drive the SK6812 LEDS
  */
 void sk6812_init(void);

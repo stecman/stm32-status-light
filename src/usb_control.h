@@ -1,12 +1,9 @@
 #pragma once
 
-#include <libopencm3/usb/usbd.h>
-
 #include <stdint.h>
 
-/**
- * Setup and start the USB peripheral
- */
 void usb_device_init(void);
+void send_test(void);
+void usb_send_packet(const void *buf, int len);
 
-extern void usb_set_config_callback(usbd_device *usbd_dev, uint16_t wValue);
+extern uint8_t usb_ready;

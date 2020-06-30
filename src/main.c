@@ -1,8 +1,11 @@
+#include "delay.h"
 #include "sk6812.h"
 #include "usb_control.h"
+#include "usb_hid_keys.h"
 
 #include <libopencm3/cm3/nvic.h>
 #include <libopencm3/cm3/systick.h>
+#include <libopencm3/stm32/exti.h>
 #include <libopencm3/stm32/flash.h>
 #include <libopencm3/stm32/gpio.h>
 #include <libopencm3/stm32/rcc.h>
@@ -85,14 +88,6 @@ static void set_all_leds(uint32_t rgb)
     }
 }
 
-/**
- * Callback for USB device ready state
- */
-void usb_set_config_callback(UNUSED usbd_device *usbd_dev, UNUSED uint16_t wValue)
-{
-    set_all_leds(0x000500);
-}
-
 int main(void)
 {
     // Turn on the SYSCFG module and switch out PA9/PA10 for PA11/PA12
@@ -100,9 +95,25 @@ int main(void)
     RCC_APB2ENR |= RCC_APB2ENR_SYSCFGCOMPEN;
     SYSCFG_CFGR1 |= SYSCFG_CFGR1_PA11_PA12_RMP;
 
+    // Clock setup
     clock_setup_12mhz_hse_out_48mhz();
+    rcc_periph_clock_enable(RCC_GPIOA);
 
+    // Init sub-systems
+    delay_init();
     sk6812_init();
+
+    // Enable EXT0 interrupt
+    nvic_enable_irq(NVIC_EXTI2_3_IRQ);
+
+    gpio_mode_setup(GPIOA, GPIO_MODE_INPUT, GPIO_PUPD_PULLUP, GPIO1);
+    gpio_mode_setup(GPIOA, GPIO_MODE_INPUT, GPIO_PUPD_PULLUP, GPIO2);
+    gpio_mode_setup(GPIOA, GPIO_MODE_INPUT, GPIO_PUPD_PULLUP, GPIO3);
+
+    // Configure EXTI subsystem
+    exti_select_source(EXTI2, GPIOA);
+    exti_set_trigger(EXTI2, EXTI_TRIGGER_FALLING);
+    exti_enable_request(EXTI2);
 
     set_all_leds(0x0);
 
@@ -114,11 +125,70 @@ int main(void)
 
     usb_device_init();
 
-    set_all_leds(0x050000);
-
     while (1) {
 
     }
+}
+
+static uint8_t keys[8] = {
+    KEY_NONE, // Modified keys
+    KEY_NONE, // Padding
+    KEY_NONE,
+    KEY_NONE,
+    KEY_NONE,
+    KEY_NONE,
+    KEY_NONE,
+    KEY_NONE,
+};
+
+void exti2_3_isr(void)
+{
+    delay_ms(50);
+    exti_reset_request(EXTI1);
+
+    if (!usb_ready) {
+        return;
+    }
+
+    const uint16_t input = GPIOA_IDR;
+
+    const mutePressed = (input & GPIO1) == 0;
+    const volDownPressed = (input & GPIO2) == 0;
+    const volUpPressed = (input & GPIO3) == 0;
+
+    if (volUpPressed && volDownPressed) {
+        keys[4] = KEY_MEDIA_REFRESH;
+        usb_send_packet(keys, 8);
+        keys[4] = KEY_NONE;
+        usb_send_packet(keys, 8);
+    }
+
+    else if (mutePressed) {
+        keys[4] = KEY_MEDIA_MUTE;
+        usb_send_packet(keys, 8);
+        keys[4] = KEY_NONE;
+        usb_send_packet(keys, 8);
+
+    }
+
+    else {
+        if (volUpPressed) {
+            keys[2] = KEY_MEDIA_VOLUMEUP;
+        } else {
+            keys[2] = KEY_NONE;
+        }
+
+        if (volDownPressed) {
+            keys[3] = KEY_MEDIA_VOLUMEDOWN;
+        } else {
+            keys[3] = KEY_NONE;
+        }
+    }
+
+    // uint32_t mask = 0;
+    // set_all_leds(mask);
+
+    usb_send_packet(keys, 8);
 }
 
 /**
