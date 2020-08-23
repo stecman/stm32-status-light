@@ -88,6 +88,17 @@ static void set_all_leds(uint32_t rgb)
     }
 }
 
+static uint8_t keys[8] = {
+    KEY_NONE, // Modified keys
+    0x0, // Reserved
+    KEY_NONE,
+    KEY_NONE,
+    KEY_NONE,
+    KEY_NONE,
+    KEY_NONE,
+    KEY_NONE,
+};
+
 int main(void)
 {
     // Turn on the SYSCFG module and switch out PA9/PA10 for PA11/PA12
@@ -104,16 +115,18 @@ int main(void)
     sk6812_init();
 
     // Enable EXT0 interrupt
+    nvic_enable_irq(NVIC_EXTI0_1_IRQ);
     nvic_enable_irq(NVIC_EXTI2_3_IRQ);
 
     gpio_mode_setup(GPIOA, GPIO_MODE_INPUT, GPIO_PUPD_PULLUP, GPIO1);
     gpio_mode_setup(GPIOA, GPIO_MODE_INPUT, GPIO_PUPD_PULLUP, GPIO2);
     gpio_mode_setup(GPIOA, GPIO_MODE_INPUT, GPIO_PUPD_PULLUP, GPIO3);
 
-    // Configure EXTI subsystem
-    exti_select_source(EXTI2, GPIOA);
-    exti_set_trigger(EXTI2, EXTI_TRIGGER_FALLING);
-    exti_enable_request(EXTI2);
+    // Configure exterinal interrupt subsystem
+    exti_select_source(EXTI1 | EXTI2 | EXTI3, GPIOA);
+    exti_set_trigger(EXTI1 | EXTI2 | EXTI3, EXTI_TRIGGER_FALLING);
+    exti_reset_request(EXTI1 | EXTI2 | EXTI3);
+    exti_enable_request(EXTI1 | EXTI2 | EXTI3);
 
     set_all_leds(0x0);
 
@@ -130,21 +143,10 @@ int main(void)
     }
 }
 
-static uint8_t keys[8] = {
-    KEY_NONE, // Modified keys
-    KEY_NONE, // Padding
-    KEY_NONE,
-    KEY_NONE,
-    KEY_NONE,
-    KEY_NONE,
-    KEY_NONE,
-    KEY_NONE,
-};
-
-void exti2_3_isr(void)
+static void handlekey(void)
 {
     delay_ms(50);
-    exti_reset_request(EXTI1);
+    exti_reset_request(EXTI1 | EXTI2 | EXTI3);
 
     if (!usb_ready) {
         return;
@@ -152,43 +154,52 @@ void exti2_3_isr(void)
 
     const uint16_t input = GPIOA_IDR;
 
-    const mutePressed = (input & GPIO1) == 0;
-    const volDownPressed = (input & GPIO2) == 0;
-    const volUpPressed = (input & GPIO3) == 0;
+    const bool mutePressed = (input & GPIO1) == 0;
+    const bool volDownPressed = (input & GPIO2) == 0;
+    const bool volUpPressed = (input & GPIO3) == 0;
 
     if (volUpPressed && volDownPressed) {
-        keys[4] = KEY_MEDIA_REFRESH;
+        keys[2] = KEY_MEDIA_REFRESH;
         usb_send_packet(keys, 8);
-        keys[4] = KEY_NONE;
+        delay_ms(50);
+        keys[2] = KEY_NONE;
         usb_send_packet(keys, 8);
     }
-
     else if (mutePressed) {
-        keys[4] = KEY_MEDIA_MUTE;
+        keys[2] = KEY_MEDIA_MUTE;
         usb_send_packet(keys, 8);
-        keys[4] = KEY_NONE;
+        delay_ms(50);
+        keys[2] = KEY_NONE;
         usb_send_packet(keys, 8);
-
     }
-
+    else if (volUpPressed) {
+        keys[2] = KEY_MEDIA_VOLUMEUP;
+        usb_send_packet(keys, 8);
+        delay_ms(50);
+        keys[2] = KEY_NONE;
+        usb_send_packet(keys, 8);
+    }
+    else if (volDownPressed) {
+        keys[2] = KEY_MEDIA_VOLUMEDOWN;
+        usb_send_packet(keys, 8);
+        delay_ms(50);
+        keys[2] = KEY_NONE;
+        usb_send_packet(keys, 8);
+    }
     else {
-        if (volUpPressed) {
-            keys[2] = KEY_MEDIA_VOLUMEUP;
-        } else {
-            keys[2] = KEY_NONE;
-        }
-
-        if (volDownPressed) {
-            keys[3] = KEY_MEDIA_VOLUMEDOWN;
-        } else {
-            keys[3] = KEY_NONE;
-        }
+        keys[2] = KEY_NONE;
+        usb_send_packet(keys, 8);
     }
+}
 
-    // uint32_t mask = 0;
-    // set_all_leds(mask);
+void exti0_1_isr(void)
+{
+    handlekey();
+}
 
-    usb_send_packet(keys, 8);
+void exti2_3_isr(void)
+{
+    handlekey();
 }
 
 /**
