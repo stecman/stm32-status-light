@@ -32,6 +32,7 @@ used to respond to commands that request device data.
 
 ### Commands
 
-| Byte | Arguments | Name                                                            |
-| ---- | --------- | --------------------------------------------------- |
-| 0xC0 | 4x 32-bit | Set the colour of each LED from left to right       |
+Currently, all bytes received by the device are transmitted to the SK6812 LEDs
+directly. A command set needs to be implemented on the device for more comprehensive
+control.
+
