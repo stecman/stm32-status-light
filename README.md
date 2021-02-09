@@ -22,7 +22,7 @@ make flash
 The status light device defines an interface with one read and one write endpoint:
 
 | Endpoint | Type      | Address | Description                            |
-| -------- | --------- | ------------------------------------------------ |
+| -------- | --------- | --------|--------------------------------------- |
 | OUT 1    | Interrupt | 0x81    | Data from the host to the status light |
 | IN 1     | Interrupt | 0x01    | Data from the status light to the host |
 
