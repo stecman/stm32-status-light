@@ -67,6 +67,8 @@ static void hid_set_config(UNUSED usbd_device *usbd_dev, UNUSED uint16_t wValue)
                 USB_REQ_TYPE_STANDARD | USB_REQ_TYPE_INTERFACE,
                 USB_REQ_TYPE_TYPE | USB_REQ_TYPE_RECIPIENT,
                 hid_control_request);
+
+    usb_ready_callback(usbd_dev);
 }
 
 usbd_device *g_usbd_dev;

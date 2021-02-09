@@ -99,6 +99,15 @@ static uint8_t keys[8] = {
     KEY_NONE,
 };
 
+/**
+ * Callback for USB device ready state
+ */
+void usb_ready_callback(UNUSED usbd_device *usbd_dev)
+{
+    usb_send_packet(keys, 8);
+}
+
+
 int main(void)
 {
     // Turn on the SYSCFG module and switch out PA9/PA10 for PA11/PA12
