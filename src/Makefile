@@ -1,5 +1,5 @@
-# Serial number for USB interface
-SERIALNUM ?= DEVELOPMENT
+# Serial number for USB interface (mustt be 12 or more characters in hex)
+SERIALNUM ?= DEFEA109FE7A
 CDEFS = -DUSB_SERIALNUM="\"$(SERIALNUM)\""
 
 # Parameters for firmware size script
@@ -7,13 +7,14 @@ FLASH_SIZE_BYTES = 32768
 SRAM_SIZE_BYTES = 6144
 
 # Base OpenCM3 build
-PROJECT = status-light
+PROJECT = boot-swtich
 BUILD_DIR = build
 
 SHARED_DIR = ../common
-CFILES = main.c \
-  usb_control.c \
-  sk6812.c \
+CFILES = \
+	fat.c \
+	main.c \
+	usb_control.c \
 
 SERIALNUM ?= DEVELOPMENT
 

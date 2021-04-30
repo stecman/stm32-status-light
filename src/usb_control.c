@@ -1,21 +1,26 @@
 #include "usb_control.h"
-
-#include "sk6812.h"
+#include "fat.h"
 
 #include <libopencm3/cm3/nvic.h>
+#include <libopencm3/stm32/gpio.h>
+#include <libopencm3/usb/msc.h>
 
-#include <stdlib.h>
+#include <string.h>
 
 #define COUNT_OF(x) ((sizeof(x)/sizeof(0[x])) / ((size_t)(!(sizeof(x) % sizeof(0[x])))))
 
-#define USB_VENDOR_ID 0x26BA
-#define USB_PRODUCT_ID 0x8002
+// USB descriptor definitions
 
-static usbd_device *g_usbd_dev;
+#define VENDOR_ID 0x26BA
+#define PRODUCT_ID 0x8003
+#define MAX_PACKET_SIZE 64
+
+// Buffer provided to the USB implementation for control requests
+static uint8_t usbd_control_buffer[128];
 
 static const char * const usb_strings[] = {
     "Stecman",
-    "Status Light",
+    "Boot Switch",
     USB_SERIALNUM,
 };
 
@@ -23,12 +28,12 @@ const struct usb_device_descriptor dev_descr = {
     .bLength = USB_DT_DEVICE_SIZE,
     .bDescriptorType = USB_DT_DEVICE,
     .bcdUSB = 0x0200,
-    .bDeviceClass = 0xFF,
-    .bDeviceSubClass = 0XFF,
-    .bDeviceProtocol = 0XFF,
-    .bMaxPacketSize0 = 64,
-    .idVendor = USB_VENDOR_ID,
-    .idProduct = USB_PRODUCT_ID,
+    .bDeviceClass = 0x00,    //
+    .bDeviceSubClass = 0x00, // These are specified in the interface descriptor
+    .bDeviceProtocol = 0x00, //
+    .bMaxPacketSize0 = MAX_PACKET_SIZE,
+    .idVendor = VENDOR_ID,
+    .idProduct = PRODUCT_ID,
     .bcdDevice = 0x0200,
     .iManufacturer = 1,
     .iProduct = 2,
@@ -41,37 +46,39 @@ const struct usb_endpoint_descriptor endpoint_descriptors[] = {
         .bLength = USB_DT_ENDPOINT_SIZE,
         .bDescriptorType = USB_DT_ENDPOINT,
         .bEndpointAddress = 0x01,
-        .bmAttributes = USB_ENDPOINT_ATTR_INTERRUPT,
-        .wMaxPacketSize = 64,
-        .bInterval = 0x20,
+        .bmAttributes = USB_ENDPOINT_ATTR_BULK,
+        .wMaxPacketSize = MAX_PACKET_SIZE,
+        .bInterval = 0,
     },
     {
         .bLength = USB_DT_ENDPOINT_SIZE,
         .bDescriptorType = USB_DT_ENDPOINT,
         .bEndpointAddress = 0x81,
-        .bmAttributes = USB_ENDPOINT_ATTR_INTERRUPT,
-        .wMaxPacketSize = 64,
-        .bInterval = 0x20,
+        .bmAttributes = USB_ENDPOINT_ATTR_BULK,
+        .wMaxPacketSize = MAX_PACKET_SIZE,
+        .bInterval = 0,
     },
 };
 
-const struct usb_interface_descriptor hid_iface = {
+const struct usb_interface_descriptor msc_descriptor = {
     .bLength = USB_DT_INTERFACE_SIZE,
     .bDescriptorType = USB_DT_INTERFACE,
     .bInterfaceNumber = 0,
     .bAlternateSetting = 0,
     .bNumEndpoints = 2,
-    .bInterfaceClass = 0xFF,
-    .bInterfaceSubClass = 0xFF,
-    .bInterfaceProtocol = 0xFF,
+    .bInterfaceClass = USB_CLASS_MSC,
+    .bInterfaceSubClass = USB_MSC_SUBCLASS_SCSI,
+    .bInterfaceProtocol = USB_MSC_PROTOCOL_BBB,
     .iInterface = 0,
     .endpoint = endpoint_descriptors,
+    .extra = NULL,
+    .extralen = 0
 };
 
 const struct usb_interface ifaces[] = {
     {
         .num_altsetting = 1,
-        .altsetting = &hid_iface,
+        .altsetting = &msc_descriptor,
     }
 };
 
@@ -83,77 +90,206 @@ const struct usb_config_descriptor config = {
     .bConfigurationValue = 1,
     .iConfiguration = 0,
     .bmAttributes = 0xE0, // Bus powered and Support Remote Wake-up
-    .bMaxPower = 0x64, // Max power = 200mA (With all LEDs on the total draw is ~150mA)
-
+    .bMaxPower = 25, // Max power = 50mA
     .interface = ifaces,
 };
 
-/* Buffer to be used for control requests. */
-static uint8_t usbd_control_buffer[128];
+// ----------------------------------------------------------------------------
+
+// Filesystem size is (SECTOR_COUNT * SECTOR_SIZE) in bytes
+// Note that sector size cannot be changed as usb_msc_init defines it
+#define SECTOR_COUNT 128
+#define SECTOR_SIZE 512
+#define BYTES_PER_SECTOR 512
+#define SECTORS_PER_CLUSTER 1
+#define RESERVED_SECTORS 1
+#define FAT_COPIES 2
+#define ROOT_ENTRIES 512
+#define ROOT_ENTRY_LENGTH 32
+#define FILEDATA_START_CLUSTER 3
+#define DATA_REGION_SECTOR (RESERVED_SECTORS + FAT_COPIES + (ROOT_ENTRIES * ROOT_ENTRY_LENGTH) / BYTES_PER_SECTOR)
+#define FILEDATA_START_SECTOR (DATA_REGION_SECTOR + (FILEDATA_START_CLUSTER - 2) * SECTORS_PER_CLUSTER)
+
+static usbd_device* _usbd_dev;
+static usbd_mass_storage* _msc_device;
+
+struct VirtualFile {
+    char* longName;
+    struct FatDirEntry dir;
+    void (*read) (uint8_t* output);
+};
+
+// Fixed contents of the boot sector
+const uint8_t BootSector[] = {
+    0xEB, 0x3C, 0x90,                        // code to jump to the bootstrap code
+    'm', 'k', 'f', 's', '.', 'f', 'a', 't',  // OEM ID
+    WBVAL(BYTES_PER_SECTOR),                 // bytes per sector
+    SECTORS_PER_CLUSTER,                     // sectors per cluster
+    WBVAL(RESERVED_SECTORS),                 // # of reserved sectors (1 boot sector)
+    FAT_COPIES,                              // FAT copies (2)
+    WBVAL(ROOT_ENTRIES),                     // root entries (512)
+    WBVAL(SECTOR_COUNT),                     // total number of sectors
+    FAT_MEDIA_FIXED_DISK,                    // media descriptor
+    WBVAL(1),                                // sectors per FAT
+    WBVAL(32),                               // sectors per track
+    WBVAL(64),                               // number of heads
+    QBVAL(0),                                // hidden sectors
+    QBVAL(0),                                // large number of sectors
+    0x00,                                    // drive number
+    0x00,                                    // reserved
+    0x29,                                    // extended boot signature
+    QBVAL(0x55AA6922),                       // volume serial number
+    'S', 'W', 'I', 'T', 'C', 'H', ' ', ' ', ' ', ' ', ' ',  // volume label
+    'F', 'A', 'T', '1', '2', ' ', ' ', ' '   // filesystem type
+};
+
+// File Allocation Table is a fixed value as there are no files larger than one cluster
+// It might be an interesting exercise to generate this on the fly, but it's not required
+const uint8_t FatSector[] = {
+    0xf8, 0xff, 0xff, 0x00, 0xf0, 0xff, 0xff, 0x0f
+};
+
 
 /**
- * Callback for the interrupt-driven OUT endpoint
- *
- * This gets called whenever a new OUT packet has arrived.
+ * Callback for switch_position file contents
  */
-static void usb_rx_callback(usbd_device * usbd_dev, uint8_t ep)
+static void readSwtich(uint8_t* output)
 {
-    (void)ep;
+    output[0] = gpio_get(GPIOA, GPIO6) ? '1' : '0';
+}
 
-    // Read the packet to clear the FIFO and make room for a new packet
-    char buf[64] __attribute__ ((aligned(4)));
-    usbd_ep_read_packet(usbd_dev, 0x01, buf, 64);
+/**
+ * Callback for switch_position_grub.vfg file contents
+ */
+static char grubConfigStr[] = "set os_hw_switch=0\n";
+static void readGrubConfig(uint8_t* output)
+{
+    // Modify config with current switch value
+    grubConfigStr[sizeof(grubConfigStr)-3] = gpio_get(GPIOA, GPIO6) ? '1' : '0';
 
-    sk6812_reset();
+    memcpy(output, &grubConfigStr, sizeof(grubConfigStr));
+}
 
-    // Dump the recieve buffer to the leds as a test
-    for (uint8_t i = 0; i < 12; i += 3) {
-        sk6812_write_rgb( *((uint32_t*)(buf + i)) );
+// "Files" to serve in the root directory
+static struct VirtualFile _virtualFiles[] = {
+    {
+        .longName = "switch_position",
+        .dir = {
+            .name = "SWITCH~1",
+            .ext = "   ",
+            .size = 1
+        },
+        .read = readSwtich
+    },
+    {
+        .longName = "switch_position_grub.cfg",
+        .dir = {
+            .name = "SWITCH~1",
+            .ext = "CFG",
+            .size = sizeof(grubConfigStr) - 1,
+        },
+        .read = readGrubConfig
+    },
+};
+
+
+static void generate_dir_sector(uint8_t* output)
+{
+    for (uint8_t i = 0; i < COUNT_OF(_virtualFiles); ++i)
+    {
+        const char* longName = _virtualFiles[i].longName;
+        struct FatDirEntry* entry = &_virtualFiles[i].dir;
+
+        // Set sector automatically based on array index
+        entry->start = FILEDATA_START_CLUSTER + i;
+
+        // Write long file name and actual directory entry
+        output += fat_write_lfn(longName, entry, output);
+        output += fat_write_dir(entry, output);
     }
 }
 
-/**
- * Callback for the interrupt-driven IN endpoint
- *
- * This gets called whenever an IN packet has been successfully transmitted.
- */
-static void usb_tx_callback(usbd_device * usbd_dev, uint8_t ep)
+static int read_block(uint32_t lba, uint8_t *copy_to)
 {
-    (void)ep;
+    memset(copy_to, 0, SECTOR_SIZE);
 
-    char buf[64] __attribute__ ((aligned(4)));
+    switch (lba) {
+        case 0: // sector 0 is the boot sector
+            memcpy(copy_to, BootSector, sizeof(BootSector));
 
-    /* Keep sending packets */
-    usbd_ep_write_packet(usbd_dev, 0x81, buf, 64);
+            // Add bootable partition signature
+            copy_to[SECTOR_SIZE - 2] = 0x55;
+            copy_to[SECTOR_SIZE - 1] = 0xAA;
+            break;
+
+        // FAT first and second copy
+        case 1:
+        case 2:
+            memcpy(copy_to, FatSector, sizeof(FatSector));
+            break;
+
+        // Root directory entry
+        case 3:
+            generate_dir_sector(copy_to);
+            break;
+
+        default: {
+            const uint16_t fileIndex = (lba - FILEDATA_START_SECTOR) / SECTORS_PER_CLUSTER;
+
+            if (lba < FILEDATA_START_SECTOR || fileIndex >= COUNT_OF(_virtualFiles)) {
+                // Out of virtual file range
+                break;
+            }
+
+            // Read from virtual file
+            _virtualFiles[fileIndex].read(copy_to);
+
+            break;
+        }
+    }
+
+    return 0;
 }
 
-static void usb_set_config(usbd_device *dev, uint16_t wValue)
+static int write_block(uint32_t lba, const uint8_t *copy_from)
 {
-    (void)wValue;
-
-    // EP OUT
-    usbd_ep_setup(dev, 0x01, USB_ENDPOINT_ATTR_INTERRUPT, 64, usb_rx_callback);
-
-    // EP IN
-    usbd_ep_setup(dev, 0x81, USB_ENDPOINT_ATTR_INTERRUPT, 64, usb_tx_callback);
+    (void)lba;
+    (void)copy_from;
+    // ignore writes
+    return 0;
 }
+
 
 void usb_device_init(void)
 {
     // Set up USB peripheral
     nvic_enable_irq(NVIC_USB_IRQ);
 
-    g_usbd_dev = usbd_init(&st_usbfs_v2_usb_driver, &dev_descr, &config, usb_strings, COUNT_OF(usb_strings), usbd_control_buffer, sizeof(usbd_control_buffer));
-    usbd_register_set_config_callback(g_usbd_dev, usb_set_config);
+     _usbd_dev = usbd_init(
+        &st_usbfs_v2_usb_driver,
+        &dev_descr,
+        &config,
+        usb_strings,
+        COUNT_OF(usb_strings),
+        usbd_control_buffer,
+        sizeof(usbd_control_buffer)
+    );
 
-    usbd_register_set_config_callback(g_usbd_dev, &usb_set_config_callback);
+    _msc_device = usb_msc_init(
+        _usbd_dev,
+        0x81, MAX_PACKET_SIZE, // In EP
+        0x01, MAX_PACKET_SIZE, // Out EP
+        "STECMAN", // SCSI vendor ID
+        "SWITCH THING", // SCSI product ID
+        "V1", // SCSI product revision level
+        SECTOR_COUNT,
+        read_block,
+        write_block
+    );
 }
 
-/**
- * USB interrupt handler
- */
 void usb_isr(void)
 {
     // Handle USB requests as they come through
-    usbd_poll(g_usbd_dev);
+    usbd_poll(_usbd_dev);
 }

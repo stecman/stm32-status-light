@@ -1,4 +1,3 @@
-#include "sk6812.h"
 #include "usb_control.h"
 
 #include <libopencm3/cm3/nvic.h>
@@ -7,36 +6,6 @@
 #include <libopencm3/stm32/gpio.h>
 #include <libopencm3/stm32/rcc.h>
 #include <libopencm3/stm32/syscfg.h>
-#include <libopencm3/stm32/timer.h>
-#include <libopencm3/usb/usbd.h>
-
-#include <stdint.h>
-#include <stdlib.h>
-
-#define UNUSED __attribute__ ((unused))
-
-static const uint8_t NUM_LEDS = 4;
-
-static void blink(void)
-{
-    sk6812_reset();
-
-    // Write an initial state so it can be seen to be working
-    static uint8_t current = 0;
-
-    for (uint8_t i = 0; i < 4; ++i) {
-        if (i == current) {
-            sk6812_write_rgb(0x110000);
-        } else {
-            sk6812_write_rgb(0x001100);
-        }
-    }
-
-    current++;
-    if (current >= 4) {
-        current = 0;
-    }
-}
 
 /**
  * Configure the 12MHz HSE to give a 48MHz PLL clock for the USB peripheral to function
@@ -76,23 +45,6 @@ static void clock_setup_12mhz_hse_out_48mhz(void)
     rcc_ahb_frequency = 48000000;
 }
 
-static void set_all_leds(uint32_t rgb)
-{
-    sk6812_reset();
-
-    for (uint8_t i = 0; i < NUM_LEDS; ++i) {
-        sk6812_write_rgb(rgb);
-    }
-}
-
-/**
- * Callback for USB device ready state
- */
-void usb_set_config_callback(UNUSED usbd_device *usbd_dev, UNUSED uint16_t wValue)
-{
-    set_all_leds(0x000500);
-}
-
 int main(void)
 {
     // Turn on the SYSCFG module and switch out PA9/PA10 for PA11/PA12
@@ -100,11 +52,9 @@ int main(void)
     RCC_APB2ENR |= RCC_APB2ENR_SYSCFGCOMPEN;
     SYSCFG_CFGR1 |= SYSCFG_CFGR1_PA11_PA12_RMP;
 
+    // Clock setup
     clock_setup_12mhz_hse_out_48mhz();
-
-    sk6812_init();
-
-    set_all_leds(0x0);
+    rcc_periph_clock_enable(RCC_GPIOA);
 
     // Configure SysTick at 1ms intervals
     systick_set_clocksource(STK_CSR_CLKSOURCE_AHB);
@@ -112,12 +62,13 @@ int main(void)
     systick_interrupt_enable();
     systick_counter_enable();
 
+    // Configure switch input
+    gpio_mode_setup(GPIOA, GPIO_MODE_INPUT, GPIO_PUPD_PULLUP, GPIO6);
+
     usb_device_init();
 
-    set_all_leds(0x050000);
-
     while (1) {
-
+        // Behaviour is defined in usb_control.c
     }
 }
 
