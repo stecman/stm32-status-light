@@ -15,7 +15,7 @@
 
 #define UNUSED __attribute__ ((unused))
 
-static const uint8_t NUM_LEDS = 4;
+static const uint8_t NUM_LEDS = 9;
 
 static void blink(void)
 {
@@ -24,7 +24,7 @@ static void blink(void)
     // Write an initial state so it can be seen to be working
     static uint8_t current = 0;
 
-    for (uint8_t i = 0; i < 4; ++i) {
+    for (uint8_t i = 0; i < NUM_LEDS; ++i) {
         if (i == current) {
             sk6812_write_rgb(0x110000);
         } else {
@@ -33,7 +33,7 @@ static void blink(void)
     }
 
     current++;
-    if (current >= 4) {
+    if (current >= NUM_LEDS) {
         current = 0;
     }
 }
@@ -90,7 +90,7 @@ static void set_all_leds(uint32_t rgb)
  */
 void usb_set_config_callback(UNUSED usbd_device *usbd_dev, UNUSED uint16_t wValue)
 {
-    set_all_leds(0x000500);
+
 }
 
 int main(void)
@@ -114,8 +114,9 @@ int main(void)
 
     usb_device_init();
 
-    set_all_leds(0x050000);
+    set_all_leds(0x0);
 
+    uint32_t i = 0;
     while (1) {
 
     }

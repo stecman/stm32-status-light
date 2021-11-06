@@ -6,7 +6,7 @@
 #include <libopencm3/stm32/timer.h>
 
 #define LED_DATA_Port GPIOA
-#define LED_DATA_Pin (1<<0)
+#define LED_DATA_Pin GPIO7
 
 #define __NOP() __asm__("nop")
 
@@ -89,7 +89,7 @@ void sk6812_init(void)
 {
     // LED data output
     rcc_periph_clock_enable(RCC_GPIOA);
-    gpio_mode_setup(LED_DATA_Port, GPIO_MODE_OUTPUT, GPIO_PUPD_NONE, GPIO0);
+    gpio_mode_setup(LED_DATA_Port, GPIO_MODE_OUTPUT, GPIO_PUPD_NONE, LED_DATA_Pin);
 
     rcc_periph_clock_enable(RCC_TIM17);
 

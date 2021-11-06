@@ -9,7 +9,7 @@
 #define COUNT_OF(x) ((sizeof(x)/sizeof(0[x])) / ((size_t)(!(sizeof(x) % sizeof(0[x])))))
 
 #define USB_VENDOR_ID 0x26BA
-#define USB_PRODUCT_ID 0x8002
+#define USB_PRODUCT_ID 0x8005
 
 static usbd_device *g_usbd_dev;
 
@@ -102,13 +102,14 @@ static void usb_rx_callback(usbd_device * usbd_dev, uint8_t ep)
 
     // Read the packet to clear the FIFO and make room for a new packet
     char buf[64] __attribute__ ((aligned(4)));
-    usbd_ep_read_packet(usbd_dev, 0x01, buf, 64);
+    uint16_t len = usbd_ep_read_packet(usbd_dev, 0x01, buf, 64);
 
     sk6812_reset();
 
     // Dump the recieve buffer to the leds as a test
-    for (uint8_t i = 0; i < 12; i += 3) {
-        sk6812_write_rgb( *((uint32_t*)(buf + i)) );
+    for (uint8_t i = 0; i < len; i += 3) {
+        const uint32_t col = (buf[i+2]<<16) | (buf[i+1]<<8) | (buf[i]);
+        sk6812_write_rgb( col );
     }
 }
 

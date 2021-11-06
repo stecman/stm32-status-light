@@ -8,7 +8,7 @@ import usb1
 import random
 
 VENDOR_ID = 0x26BA
-PRODUCT_ID = 0x8002
+PRODUCT_ID = 0x8005
 
 class UsbMultiHandle():
     """ Open handles to all devices matching the vendor and product ID """
@@ -56,13 +56,6 @@ def controlWrite(handle, data):
 
     return True
 
-def send_colour(handle, a, b, c, d):
-    data = bytearray(a + b + c + d)
-    handle.interruptWrite(
-        1,
-        data
-    )
-
 def float_to_byte(colour):
     """Convert a float array to a byte array (0.0 to 1.0 -> 0 to 255)"""
     return [
@@ -81,27 +74,24 @@ with usb1.USBContext() as context:
         offset = 0.01
         updateCount = 0
 
-        hues = [hue/16.0 for hue in range(0, 16)]
+        hues = [hue/64.0 for hue in range(0, 64)]
 
         while True:
-            time.sleep(1/60.0)
+            time.sleep(1/30.0)
 
             colours = []
 
             # Update values
             for i in range(len(hues)):
-                colours.append(float_to_byte(colorsys.hsv_to_rgb(hues[i] % 1.0, 1, 0.5)))
+                colours.append(float_to_byte(colorsys.hsv_to_rgb(hues[i] % 1.0, 1, 0.1)))
                 hues[i] += offset
 
             # Send values
             index = 0
 
             for handle in handles:
-                send_colour(handle,
-                    colours[index],
-                    colours[index + 1],
-                    colours[index + 2],
-                    colours[index + 3],
-                )
+                show = colours[index:index+9]
+                data = bytearray([ch for col in show for ch in col])
+                handle.interruptWrite(1, data)
 
-                index += 4
+                index += 9
