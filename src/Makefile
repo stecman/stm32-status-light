@@ -50,7 +50,7 @@ debug_server:
 	openocd -f $(OOCD_FILE) -c 'attach ()'
 
 debug_gdb:
-	arm-none-eabi-gdb $(PROJECT).elf -ex 'target remote :3333'
+	gdb-multiarch $(PROJECT).elf -ex 'target remote :3333'
 
 disasm: $(PROJECT).elf
 	$(OBJDUMP) -d $(PROJECT).elf

@@ -6,17 +6,18 @@
 #include <libopencm3/stm32/flash.h>
 #include <libopencm3/stm32/gpio.h>
 #include <libopencm3/stm32/rcc.h>
+#include <libopencm3/stm32/st_usbfs.h>
 #include <libopencm3/stm32/syscfg.h>
 #include <libopencm3/stm32/timer.h>
-#include <libopencm3/usb/usbd.h>
 #include <libopencm3/usb/hid.h>
+#include <libopencm3/usb/usbd.h>
 
 #define COUNT_OF(x) ((sizeof(x)/sizeof(0[x])) / ((size_t)(!(sizeof(x) % sizeof(0[x])))))
 
 #define UNUSED __attribute__ ((unused))
 
 #define VENDOR_ID 0x26BA
-#define PRODUCT_ID 0x8002
+#define PRODUCT_ID 0x8004
 
 #include "usb_descriptors.h"
 
@@ -73,7 +74,8 @@ static void hid_set_config(UNUSED usbd_device *usbd_dev, UNUSED uint16_t wValue)
 
 usbd_device *g_usbd_dev;
 
-void usb_send_packet(const void *buf, int len){
+void usb_send_packet(const void *buf, int len)
+{
     usbd_ep_write_packet(g_usbd_dev, 0x81, buf, len);
 }
 

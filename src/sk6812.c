@@ -7,7 +7,7 @@
 #include <libopencm3/stm32/rcc.h>
 
 #define LED_DATA_Port GPIOA
-#define LED_DATA_Pin (1<<0)
+#define LED_DATA_Pin GPIO0
 
 #define __NOP() __asm__("nop")
 

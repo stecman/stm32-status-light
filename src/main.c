@@ -15,6 +15,7 @@
 
 #include <stdint.h>
 #include <stdlib.h>
+#include <string.h>
 
 #define UNUSED __attribute__ ((unused))
 
@@ -88,7 +89,29 @@ static void set_all_leds(uint32_t rgb)
     }
 }
 
-static uint8_t keys[8] = {
+enum MediaKey {
+    kMedia_PlayPause = (1<<0),
+    kMedia_Stop = (1<<1),
+    kMedia_PrevTrack = (1<<2),
+    kMedia_NextTrack = (1<<3),
+    kMedia_Mute = (1<<4),
+    kMedia_VolumeDown = (1<<5),
+    kMedia_VolumeUp = (1<<6),
+};
+
+enum SystemKey {
+    kSystem_PowerDown = (1<<0),
+    kSystem_Sleep = (1<<1),
+    kSystem_WakeUp = (1<<2),
+    kSystem_ContextMenu = (1<<3),
+    kSystem_MainMenu = (1<<4),
+    kSystem_AppMenu = (1<<5),
+    kSystem_ColdRestart = (1<<6),
+    kSystem_WarmRestart = (1<<7),
+};
+
+static uint8_t usb_keys[9] = {
+    1, // Report ID
     KEY_NONE, // Modified keys
     0x0, // Reserved
     KEY_NONE,
@@ -99,14 +122,56 @@ static uint8_t keys[8] = {
     KEY_NONE,
 };
 
+static uint8_t usb_media_keys[2] = {
+    2, // Report ID
+    0x0, // Media keys bit mask
+};
+
+static uint8_t usb_sys_keys[2] = {
+    3, // Report ID
+    0x0, // System keys bit mask
+};
+
+/**
+ * Send updates for all reports
+ */
+static void usb_send_updates(void)
+{
+    if (usb_ready) {
+        usb_send_packet(usb_keys, sizeof(usb_keys));
+        // usb_send_packet(usb_media_keys, sizeof(usb_media_keys));
+        // usb_send_packet(usb_sys_keys, sizeof(usb_sys_keys));
+    }
+}
+
 /**
  * Callback for USB device ready state
  */
 void usb_ready_callback(UNUSED usbd_device *usbd_dev)
 {
-    usb_send_packet(keys, 8);
+    usb_send_updates();
+    set_all_leds(0x005500);
 }
 
+// Key codes each button should send (left to right for the user)
+static const uint8_t kKeyMap[16] = {
+    0x68, // F13
+    0x69, // F14
+    0x6a, // F15
+    0x6b, // F16
+    0x6c, // F17
+    0x6d, // F18
+    0x6e, // F19
+    0x6f, // F20
+    0x70, // F21
+    0x71, // F22
+    0x72, // F23
+    0x73, // F24
+    0x74, // Execute
+    0x78, // Stop
+    0x81, // Again
+    0x80, // Power
+};
 
 int main(void)
 {
@@ -118,24 +183,17 @@ int main(void)
     // Clock setup
     clock_setup_12mhz_hse_out_48mhz();
     rcc_periph_clock_enable(RCC_GPIOA);
+    rcc_periph_clock_enable(RCC_GPIOB);
 
     // Init sub-systems
     delay_init();
     sk6812_init();
 
-    // Enable EXT0 interrupt
-    nvic_enable_irq(NVIC_EXTI0_1_IRQ);
-    nvic_enable_irq(NVIC_EXTI2_3_IRQ);
+    gpio_mode_setup(GPIOA, GPIO_MODE_OUTPUT, GPIO_PUPD_NONE, GPIO1 | GPIO2 | GPIO3 | GPIO4);
+    gpio_set(GPIOA, GPIO1 | GPIO2 | GPIO3 | GPIO4);
 
-    gpio_mode_setup(GPIOA, GPIO_MODE_INPUT, GPIO_PUPD_PULLUP, GPIO1);
-    gpio_mode_setup(GPIOA, GPIO_MODE_INPUT, GPIO_PUPD_PULLUP, GPIO2);
-    gpio_mode_setup(GPIOA, GPIO_MODE_INPUT, GPIO_PUPD_PULLUP, GPIO3);
-
-    // Configure exterinal interrupt subsystem
-    exti_select_source(EXTI1 | EXTI2 | EXTI3, GPIOA);
-    exti_set_trigger(EXTI1 | EXTI2 | EXTI3, EXTI_TRIGGER_FALLING);
-    exti_reset_request(EXTI1 | EXTI2 | EXTI3);
-    exti_enable_request(EXTI1 | EXTI2 | EXTI3);
+    gpio_mode_setup(GPIOA, GPIO_MODE_INPUT, GPIO_PUPD_PULLDOWN, GPIO5 | GPIO6 | GPIO7);
+    gpio_mode_setup(GPIOB, GPIO_MODE_INPUT, GPIO_PUPD_PULLDOWN, GPIO1);
 
     set_all_leds(0x0);
 
@@ -147,68 +205,104 @@ int main(void)
 
     usb_device_init();
 
+    uint16_t state = 0x0;
+    uint16_t lastState = 0x0;
+
+    uint8_t debounce[16];
+
+    const uint32_t moder_base = GPIOA_MODER;
+
     while (1) {
+        // Scan key matrix
+        for (uint8_t row = 0; row < 4; ++row) {
+            gpio_mode_setup(GPIOA, GPIO_MODE_ANALOG, GPIO_PUPD_NONE, GPIO1 | GPIO2 | GPIO3 | GPIO4);
+            gpio_mode_setup(GPIOA, GPIO_MODE_OUTPUT, GPIO_PUPD_NONE, (1<<(row+1)));
 
+            // This would be better, but I'm having trouble getting it to work with breaking
+            // GPIOA_MODER &= ~0x3FC;
+            // GPIOA_MODER |= (0b0100 << (row*2));
+
+            // Read all columns (split across GPIO A & B which makes this slightly messy)
+            const uint8_t rowState = ((GPIOA_IDR & 0xE0) >> 5) | ((GPIOB_IDR & 0x02) << 2);
+
+            // Debounce keys by requiring repeated reads before transitioning state
+            for (uint8_t i = 0; i < 4; ++i) {
+                const uint8_t keyIndex = (row*4) + i;
+
+                if (rowState & (1<<i)) {
+                    // Trigger key on after a fixed number of high reads
+                    if (debounce[keyIndex] < 50) {
+                        debounce[keyIndex]++;
+                    } else {
+                        state |= (1<<keyIndex);
+                    }
+                } else {
+                    // Trigger key off after a fixed number of low reads
+                    if (debounce[keyIndex] > 0) {
+                        debounce[keyIndex]--;
+                    } else {
+                        state &= ~(1<<keyIndex);
+                    }
+                }
+            }
+        }
+
+        if (state != lastState) {
+            const uint8_t kMaxUsbIndex = 9;
+            uint8_t usbIndex = 3;
+
+            // Clear key map
+            for (uint8_t i = usbIndex; i < kMaxUsbIndex - usbIndex; i++) {
+                usb_keys[i] = KEY_NONE;
+            }
+
+            // Keys 1-16 from fixed mapping
+            for (uint8_t i = 0; i < 16; i++) {
+                if (state & (1<<i)) {
+                    usb_keys[usbIndex] = kKeyMap[i];
+                    usbIndex++;
+
+                    if (usbIndex == kMaxUsbIndex) {
+                        // No more places to send pressed keys
+                        break;
+                    }
+                }
+            }
+
+            // // Key 13
+            // if (state & 0x1000) {
+            //     usb_sys_keys[1] |= kSystem_WarmRestart;
+            // } else {
+            //     usb_sys_keys[1] &= ~kSystem_WarmRestart;
+            // }
+
+            // // Key 14
+            // if (state & 0x2000 && usbIndex < kMaxUsbIndex) {
+            //     usb_keys[usbIndex] = KEY_MEDIA_REFRESH;
+            //     usbIndex++;
+            // }
+
+            // // Key 15
+            // if (state & 0x4000) {
+            //     usb_media_keys[1] |= kMedia_VolumeDown;
+            // } else {
+            //     usb_media_keys[1] &= ~kMedia_VolumeDown;
+            // }
+
+            // // Key 16
+            // if (state & 0x8000) {
+            //     usb_media_keys[1] |= kMedia_VolumeUp;
+            // } else {
+            //     usb_media_keys[1] &= ~kMedia_VolumeUp;
+            // }
+
+            usb_send_updates();
+        }
+
+        lastState = state;
     }
-}
 
-static void handlekey(void)
-{
-    delay_ms(50);
-    exti_reset_request(EXTI1 | EXTI2 | EXTI3);
-
-    if (!usb_ready) {
-        return;
-    }
-
-    const uint16_t input = GPIOA_IDR;
-
-    const bool mutePressed = (input & GPIO1) == 0;
-    const bool volDownPressed = (input & GPIO2) == 0;
-    const bool volUpPressed = (input & GPIO3) == 0;
-
-    if (volUpPressed && volDownPressed) {
-        keys[2] = KEY_MEDIA_REFRESH;
-        usb_send_packet(keys, 8);
-        delay_ms(50);
-        keys[2] = KEY_NONE;
-        usb_send_packet(keys, 8);
-    }
-    else if (mutePressed) {
-        keys[2] = KEY_MEDIA_MUTE;
-        usb_send_packet(keys, 8);
-        delay_ms(50);
-        keys[2] = KEY_NONE;
-        usb_send_packet(keys, 8);
-    }
-    else if (volUpPressed) {
-        keys[2] = KEY_MEDIA_VOLUMEUP;
-        usb_send_packet(keys, 8);
-        delay_ms(50);
-        keys[2] = KEY_NONE;
-        usb_send_packet(keys, 8);
-    }
-    else if (volDownPressed) {
-        keys[2] = KEY_MEDIA_VOLUMEDOWN;
-        usb_send_packet(keys, 8);
-        delay_ms(50);
-        keys[2] = KEY_NONE;
-        usb_send_packet(keys, 8);
-    }
-    else {
-        keys[2] = KEY_NONE;
-        usb_send_packet(keys, 8);
-    }
-}
-
-void exti0_1_isr(void)
-{
-    handlekey();
-}
-
-void exti2_3_isr(void)
-{
-    handlekey();
+    while (1) {}
 }
 
 /**

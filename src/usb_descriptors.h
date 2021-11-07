@@ -19,6 +19,7 @@ static const uint8_t hid_report_descriptor[] = {
     0x05, 0x01,        // Usage Page (Generic Desktop Ctrls)
     0x09, 0x06,        // Usage (Keyboard)
     0xA1, 0x01,        // Collection (Application)
+    0x85, 0x01,        //   Report ID (1)
     0x05, 0x07,        //   Usage Page (Kbrd/Keypad)
     0x19, 0xE0,        //   Usage Minimum (0xE0)
     0x29, 0xE7,        //   Usage Maximum (0xE7)
@@ -30,23 +31,54 @@ static const uint8_t hid_report_descriptor[] = {
     0x95, 0x01,        //   Report Count (1)
     0x75, 0x08,        //   Report Size (8)
     0x81, 0x01,        //   Input (Const,Array,Abs,No Wrap,Linear,Preferred State,No Null Position)
-    0x95, 0x03,        //   Report Count (3)
-    0x75, 0x01,        //   Report Size (1)
-    0x05, 0x08,        //   Usage Page (LEDs)
-    0x19, 0x01,        //   Usage Minimum (Num Lock)
-    0x29, 0x03,        //   Usage Maximum (Scroll Lock)
-    0x91, 0x02,        //   Output (Data,Var,Abs,No Wrap,Linear,Preferred State,No Null Position,Non-volatile)
-    0x95, 0x05,        //   Report Count (5)
-    0x75, 0x01,        //   Report Size (1)
-    0x91, 0x01,        //   Output (Const,Array,Abs,No Wrap,Linear,Preferred State,No Null Position,Non-volatile)
     0x95, 0x06,        //   Report Count (6)
     0x75, 0x08,        //   Report Size (8)
     0x15, 0x00,        //   Logical Minimum (0)
     0x26, 0xFF, 0x00,  //   Logical Maximum (255)
-    0x05, 0x07,        //   Usage Page (Kbrd/Keypad)
     0x19, 0x00,        //   Usage Minimum (0x00)
     0x2A, 0xFF, 0x00,  //   Usage Maximum (0xFF)
     0x81, 0x00,        //   Input (Data,Array,Abs,No Wrap,Linear,Preferred State,No Null Position)
+    0xC0,              // End Collection
+
+    0x05, 0x01,        // Usage Page (Generic Desktop Ctrls)
+    0x05, 0x0C,        // Usage Page (Consumer)
+    0x09, 0x01,        // Usage (Consumer Control)
+    0xA1, 0x01,        // Collection (Application)
+    0x85, 0x02,        //   Report ID (2)
+    0x15, 0x00,        //   Logical Minimum (0)
+    0x25, 0x01,        //   Logical Maximum (1)
+    0x75, 0x01,        //   Report Size (1)
+    0x95, 0x07,        //   Report Count (7)
+    0x09, 0xCD,        //   Usage (Play/Pause)
+    0x09, 0xB7,        //   Usage (Stop)
+    0x09, 0xB6,        //   Usage (Scan Previous Track)
+    0x09, 0xB5,        //   Usage (Scan Next Track)
+    0x09, 0xE2,        //   Usage (Mute)
+    0x09, 0xEA,        //   Usage (Volume Decrement)
+    0x09, 0xE9,        //   Usage (Volume Increment)
+    0x81, 0x02,        //   Input (Data,Var,Abs,No Wrap,Linear,Preferred State,No Null Position)
+    0x95, 0x01,        //   Report Count (1)
+    0x75, 0x01,        //   Report Size (1)
+    0x81, 0x01,        //   Input (Const,Array,Abs,No Wrap,Linear,Preferred State,No Null Position)
+    0xC0,              // End Collection
+
+    0x05, 0x01,        // Usage Page (Generic Desktop Ctrls)
+    0x09, 0x80,        // Usage (Sys Control)
+    0xA1, 0x01,        // Collection (Application)
+    0x85, 0x03,        //   Report ID (3)
+    0x15, 0x00,        //   Logical Minimum (0)
+    0x25, 0x01,        //   Logical Maximum (1)
+    0x75, 0x01,        //   Report Size (1)
+    0x95, 0x08,        //   Report Count (8)
+    0x09, 0x81,        //   Usage (Sys Power Down)
+    0x09, 0x82,        //   Usage (Sys Sleep)
+    0x09, 0x83,        //   Usage (Sys Wake Up)
+    0x09, 0x84,        //   Usage (Sys Context Menu)
+    0x09, 0x85,        //   Usage (Sys Main Menu)
+    0x09, 0x86,        //   Usage (Sys App Menu)
+    0x09, 0x8E,        //   Usage (Sys Cold Restart)
+    0x09, 0x8F,        //   Usage (Sys Warm Restart)
+    0x81, 0x02,        //   Input (Data,Var,Abs,No Wrap,Linear,Preferred State,No Null Position)
     0xC0,              // End Collection
 };
 
@@ -89,7 +121,7 @@ const struct usb_endpoint_descriptor hid_endpoint = {
 	.bEndpointAddress = 0x81,
 	.bmAttributes = USB_ENDPOINT_ATTR_INTERRUPT,
 	.wMaxPacketSize = 64,
-	.bInterval = 0x20,
+	.bInterval = 10, // polling interval in milliseconds
 };
 
 const struct usb_interface_descriptor hid_iface = {
@@ -129,6 +161,6 @@ const struct usb_config_descriptor config = {
 
 static const char * const usb_strings[] = {
     "Stecman",
-    "Media Keys",
+    "Goliath 16 Key",
     USB_SERIALNUM,
 };
