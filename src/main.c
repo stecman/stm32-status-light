@@ -97,6 +97,7 @@ enum MediaKey {
     kMedia_Mute = (1<<4),
     kMedia_VolumeDown = (1<<5),
     kMedia_VolumeUp = (1<<6),
+    kMedia_Refresh = (1<<7),
 };
 
 enum SystemKey {
@@ -156,11 +157,10 @@ static void usb_send_updates(void)
 void usb_ready_callback(UNUSED usbd_device *usbd_dev)
 {
     usb_send_updates();
-    set_all_leds(0x005500);
 }
 
 // Key codes each button should send (left to right for the user)
-static const uint8_t kKeyMap[16] = {
+static const uint8_t kKeyMap[12] = {
     0x68, // F13
     0x69, // F14
     0x6a, // F15
@@ -173,10 +173,6 @@ static const uint8_t kKeyMap[16] = {
     0x71, // F22
     0x72, // F23
     0x73, // F24
-    0x74, // Execute
-    0x78, // Stop
-    0x81, // Again
-    0x80, // Power
 };
 
 int main(void)
@@ -262,8 +258,8 @@ int main(void)
                 usb_keys[i] = KEY_NONE;
             }
 
-            // Keys 1-16 from fixed mapping
-            for (uint8_t i = 0; i < 16; i++) {
+            // Keys from fixed mapping
+            for (uint8_t i = 0; i < 12; i++) {
                 if (state & (1<<i)) {
                     usb_keys[usbIndex] = kKeyMap[i];
                     usbIndex++;
@@ -275,32 +271,33 @@ int main(void)
                 }
             }
 
-            // // Key 13
-            // if (state & 0x1000) {
-            //     usb_sys_keys[1] |= kSystem_WarmRestart;
-            // } else {
-            //     usb_sys_keys[1] &= ~kSystem_WarmRestart;
-            // }
+            // Key 13
+            if (state & 0x1000) {
+                usb_media_keys[1] |= kMedia_NextTrack;
+            } else {
+                usb_media_keys[1] &= ~kMedia_NextTrack;
+            }
 
-            // // Key 14
-            // if (state & 0x2000 && usbIndex < kMaxUsbIndex) {
-            //     usb_keys[usbIndex] = KEY_MEDIA_REFRESH;
-            //     usbIndex++;
-            // }
+            // Key 14
+            if (state & 0x2000) {
+                usb_media_keys[1] |= kMedia_Mute;
+            } else {
+                usb_media_keys[1] &= ~kMedia_Mute;
+            }
 
-            // // Key 15
-            // if (state & 0x4000) {
-            //     usb_media_keys[1] |= kMedia_VolumeDown;
-            // } else {
-            //     usb_media_keys[1] &= ~kMedia_VolumeDown;
-            // }
+            // Key 15
+            if (state & 0x4000) {
+                usb_media_keys[1] |= kMedia_VolumeDown;
+            } else {
+                usb_media_keys[1] &= ~kMedia_VolumeDown;
+            }
 
-            // // Key 16
-            // if (state & 0x8000) {
-            //     usb_media_keys[1] |= kMedia_VolumeUp;
-            // } else {
-            //     usb_media_keys[1] &= ~kMedia_VolumeUp;
-            // }
+            // Key 16
+            if (state & 0x8000) {
+                usb_media_keys[1] |= kMedia_VolumeUp;
+            } else {
+                usb_media_keys[1] &= ~kMedia_VolumeUp;
+            }
 
             usb_send_updates();
         }
