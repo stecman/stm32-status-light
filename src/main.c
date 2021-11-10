@@ -137,10 +137,16 @@ static uint8_t usb_sys_keys[2] = {
  */
 static void usb_send_updates(void)
 {
+    static uint8_t lastMediaKeys = 0;
+
     if (usb_ready) {
         usb_send_packet(usb_keys, sizeof(usb_keys));
-        // usb_send_packet(usb_media_keys, sizeof(usb_media_keys));
-        // usb_send_packet(usb_sys_keys, sizeof(usb_sys_keys));
+
+        if (usb_media_keys[1] != lastMediaKeys) {
+            usb_send_packet(usb_media_keys, sizeof(usb_media_keys));
+            lastMediaKeys = usb_media_keys[1];
+        }
+        //usb_send_packet(usb_sys_keys, sizeof(usb_sys_keys));
     }
 }
 

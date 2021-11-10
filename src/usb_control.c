@@ -26,6 +26,8 @@
 /* Buffer to be used for control requests. */
 static uint8_t usbd_control_buffer[128];
 
+volatile uint8_t waiting_tx = 0;
+
 uint8_t usb_ready = 0;
 
 static enum usbd_request_return_codes hid_control_request( UNUSED usbd_device *usbd_dev,
@@ -76,7 +78,9 @@ usbd_device *g_usbd_dev;
 
 void usb_send_packet(const void *buf, int len)
 {
+    waiting_tx = 1;
     usbd_ep_write_packet(g_usbd_dev, 0x81, buf, len);
+    while (waiting_tx);
 }
 
 void usb_device_init(void)
@@ -93,6 +97,15 @@ void usb_device_init(void)
  */
 void usb_isr(void)
 {
+    // Grab the USB endpoint register before it's modified by the USB driver
+    // CTR_TX: "This bit is set by the hardware when an IN transaction is
+    // successfully completed on this endpoint"
+    const uint16_t ep_register = GET_REG(USB_EP_REG(1));
+
     // Handle USB requests as they come through
     usbd_poll(g_usbd_dev);
+
+    if (ep_register & USB_EP_TX_CTR) {
+        waiting_tx = 0;
+    }
 }
