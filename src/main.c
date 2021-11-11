@@ -100,17 +100,6 @@ enum MediaKey {
     kMedia_Refresh = (1<<7),
 };
 
-enum SystemKey {
-    kSystem_PowerDown = (1<<0),
-    kSystem_Sleep = (1<<1),
-    kSystem_WakeUp = (1<<2),
-    kSystem_ContextMenu = (1<<3),
-    kSystem_MainMenu = (1<<4),
-    kSystem_AppMenu = (1<<5),
-    kSystem_ColdRestart = (1<<6),
-    kSystem_WarmRestart = (1<<7),
-};
-
 static uint8_t usb_keys[9] = {
     1, // Report ID
     KEY_NONE, // Modified keys
@@ -128,26 +117,23 @@ static uint8_t usb_media_keys[2] = {
     0x0, // Media keys bit mask
 };
 
-static uint8_t usb_sys_keys[2] = {
-    3, // Report ID
-    0x0, // System keys bit mask
-};
+static uint16_t changed_mask = 0;
 
 /**
  * Send updates for all reports
  */
 static void usb_send_updates(void)
 {
-    static uint8_t lastMediaKeys = 0;
-
     if (usb_ready) {
-        usb_send_packet(usb_keys, sizeof(usb_keys));
-
-        if (usb_media_keys[1] != lastMediaKeys) {
-            usb_send_packet(usb_media_keys, sizeof(usb_media_keys));
-            lastMediaKeys = usb_media_keys[1];
+        if (changed_mask & 0b111111111111) {
+            usb_send_packet(usb_keys, sizeof(usb_keys));
         }
-        //usb_send_packet(usb_sys_keys, sizeof(usb_sys_keys));
+
+        if (changed_mask & 0b1111000000000000) {
+            usb_send_packet(usb_media_keys, sizeof(usb_media_keys));
+        }
+
+        changed_mask = 0;
     }
 }
 
@@ -156,6 +142,9 @@ static void usb_send_updates(void)
  */
 void usb_ready_callback(UNUSED usbd_device *usbd_dev)
 {
+    // Always output all reports on connect
+    // Hosts seem to ignore the device if it doesn't do this
+    changed_mask = 0xFFFF;
     usb_send_updates();
 }
 
@@ -250,6 +239,8 @@ int main(void)
         }
 
         if (state != lastState) {
+            changed_mask = state ^ lastState;
+
             const uint8_t kMaxUsbIndex = 9;
             uint8_t usbIndex = 3;
 

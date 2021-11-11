@@ -59,25 +59,6 @@ static const uint8_t hid_report_descriptor[] = {
     0x09, 0xE3,        //   Usage (Refresh)
     0x81, 0x02,        //   Input (Data,Var,Abs,No Wrap,Linear,Preferred State,No Null Position)
     0xC0,              // End Collection
-
-    0x05, 0x01,        // Usage Page (Generic Desktop Ctrls)
-    0x09, 0x80,        // Usage (Sys Control)
-    0xA1, 0x01,        // Collection (Application)
-    0x85, 0x03,        //   Report ID (3)
-    0x15, 0x00,        //   Logical Minimum (0)
-    0x25, 0x01,        //   Logical Maximum (1)
-    0x75, 0x01,        //   Report Size (1)
-    0x95, 0x08,        //   Report Count (8)
-    0x09, 0x81,        //   Usage (Sys Power Down)
-    0x09, 0x82,        //   Usage (Sys Sleep)
-    0x09, 0x83,        //   Usage (Sys Wake Up)
-    0x09, 0x84,        //   Usage (Sys Context Menu)
-    0x09, 0x85,        //   Usage (Sys Main Menu)
-    0x09, 0x86,        //   Usage (Sys App Menu)
-    0x09, 0x8E,        //   Usage (Sys Cold Restart)
-    0x09, 0x8F,        //   Usage (Sys Warm Restart)
-    0x81, 0x02,        //   Input (Data,Var,Abs,No Wrap,Linear,Preferred State,No Null Position)
-    0xC0,              // End Collection
 };
 
 static const uint8_t USBD_HID_Desc[] = {
