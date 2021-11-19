@@ -127,10 +127,12 @@ static void usb_send_updates(void)
     if (usb_ready) {
         if (changed_mask & 0b111111111111) {
             usb_send_packet(usb_keys, sizeof(usb_keys));
+            usb_block_until_sent();
         }
 
         if (changed_mask & 0b1111000000000000) {
             usb_send_packet(usb_media_keys, sizeof(usb_media_keys));
+            usb_block_until_sent();
         }
 
         changed_mask = 0;

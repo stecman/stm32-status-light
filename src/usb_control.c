@@ -26,6 +26,7 @@
 /* Buffer to be used for control requests. */
 static uint8_t usbd_control_buffer[128];
 
+uint32_t waiting_start = 0;
 volatile uint8_t waiting_tx = 0;
 
 uint8_t usb_ready = 0;
@@ -43,7 +44,10 @@ static enum usbd_request_return_codes hid_control_request( UNUSED usbd_device *u
             if(req->wValue==0x2200){
                 *buf = (uint8_t *)hid_report_descriptor;
                 *len = sizeof(hid_report_descriptor);
-                if(usb_ready==0) usb_ready=1;
+                if(usb_ready == 0) {
+                    waiting_tx = 0;
+                    usb_ready = 1;
+                }
                 return 1;
             }else if(req->wValue==0x2100){
                 *buf = (uint8_t *)USBD_HID_Desc;
@@ -71,6 +75,7 @@ static void hid_set_config(UNUSED usbd_device *usbd_dev, UNUSED uint16_t wValue)
                 USB_REQ_TYPE_TYPE | USB_REQ_TYPE_RECIPIENT,
                 hid_control_request);
 
+    waiting_tx = 0;
     usb_ready_callback(usbd_dev);
 }
 
@@ -78,9 +83,19 @@ usbd_device *g_usbd_dev;
 
 void usb_send_packet(const void *buf, int len)
 {
-    waiting_tx = 1;
-    usbd_ep_write_packet(g_usbd_dev, 0x81, buf, len);
-    while (waiting_tx);
+    if (usbd_ep_write_packet(g_usbd_dev, 0x81, buf, len)) {
+        waiting_start = systick_get_value();
+        waiting_tx = 1;
+    }
+}
+
+void usb_block_until_sent(void)
+{
+    // Block for up to 100ms, then give up
+    // This is a bit of a cop-out instead of inspecting the USB registers
+    const uint32_t waiting_end = waiting_start + 100;
+    while (waiting_tx && systick_get_value() < waiting_end);
+    waiting_tx = 0;
 }
 
 void usb_device_init(void)
